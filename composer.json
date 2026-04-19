@@ -1,0 +1,26 @@
+{
+	"name": "jesgs-interactive/wp-block-template-sync",
+	"description": "A WordPress plugin that syncs changes to theme templates in the Site Editor with the files in the theme.",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"require": {
+		"php": ">=7.4"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^12.5.22",
+		"brain/monkey": "^2.7"
+	},
+	"autoload": {
+		"classmap": [
+			"includes/"
+		]
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"WpBlockTemplateSync\\Tests\\": "tests/"
+		}
+	},
+	"scripts": {
+		"test": "phpunit"
+	}
+}
