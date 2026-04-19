@@ -6,6 +6,8 @@ A WordPress plugin that syncs changes to theme templates in the Site Editor with
 
 When you edit a block theme template or template part in the WordPress **Site Editor** (Appearance → Editor) and save it, WordPress stores the updated markup in the database. This plugin listens for those REST API save events and writes the new block markup back to the corresponding HTML file in your theme directory — keeping your theme's source files in sync with Site Editor customisations.
 
+**Note:** Due to the headaches of dealing with filesystem permissions and potential security issues, this plugin is __intended for local development only__.
+
 ### How it works
 
 | Site Editor save | Plugin action |
