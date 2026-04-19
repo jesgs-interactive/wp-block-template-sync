@@ -28,7 +28,7 @@ add_action(
 		$sync = new WpBlockTemplateSync\TemplateSync();
 		$sync->init();
 
-		new WpBlockTemplateSync\GlobalStylesSync();
+		$global_styles_sync = new WpBlockTemplateSync\GlobalStylesSync(); // phpcs:ignore -- hooks registered in constructor; variable kept to document intent.
 	}
 );
 

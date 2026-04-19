@@ -84,7 +84,18 @@ class GlobalStylesSync {
 			return;
 		}
 
-		$content = is_string( $new_value ) ? $new_value : (string) wp_json_encode( $new_value );
+		if ( is_string( $new_value ) ) {
+			$content = $new_value;
+		} else {
+			$encoded = wp_json_encode( $new_value );
+
+			if ( false === $encoded ) {
+				return;
+			}
+
+			$content = $encoded;
+		}
+
 		$this->sync_to_theme( $content );
 	}
 
