@@ -4,16 +4,15 @@
 	xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
 	bootstrap="tests/bootstrap.php"
 	colors="true"
-	verbose="true"
 >
 	<testsuites>
 		<testsuite name="Unit">
 			<directory>tests/Unit</directory>
 		</testsuite>
 	</testsuites>
-	<coverage>
+	<source>
 		<include>
 			<directory suffix=".php">includes</directory>
 		</include>
-	</coverage>
+	</source>
 </phpunit>
