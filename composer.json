@@ -12,7 +12,8 @@
 	},
 	"autoload": {
 		"classmap": [
-			"includes/"
+			"includes/",
+			"inc/"
 		]
 	},
 	"autoload-dev": {

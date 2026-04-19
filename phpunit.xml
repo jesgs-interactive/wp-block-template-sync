@@ -13,6 +13,7 @@
 	<source>
 		<include>
 			<directory suffix=".php">includes</directory>
+			<directory suffix=".php">inc</directory>
 		</include>
 	</source>
 </phpunit>
