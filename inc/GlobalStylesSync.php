@@ -180,29 +180,43 @@ class GlobalStylesSync {
 
 		$timestamp = gmdate( 'Y-m-d-His' );
 
-		// Backup and overwrite theme.json.
-		if ( file_exists( $theme_json_path ) ) {
-			$backup_path = $backup_dir . '/theme-' . $timestamp . '.json';
-			copy( $theme_json_path, $backup_path );
-			$result['backup'][] = $backup_path;
+		$theme_json_encoded = wp_json_encode( $theme_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+
+		if ( false === $theme_json_encoded ) {
+			return $result;
 		}
 
-		$theme_json_content = (string) wp_json_encode( $theme_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		$theme_json_content = (string) $theme_json_encoded;
+
+		if ( '' === $theme_json_content ) {
+			return $result;
+		}
+
+		// Backup existing theme.json before overwriting.
+		if ( file_exists( $theme_json_path ) ) {
+			$backup_path = $backup_dir . '/theme-' . $timestamp . '.json';
+
+			if ( copy( $theme_json_path, $backup_path ) ) {
+				$result['backup'][] = $backup_path;
+			}
+		}
 
 		if ( $this->write_file( $theme_json_path, $theme_json_content ) ) {
 			$result['written'][] = $theme_json_path;
 		}
 
-		// Backup and overwrite style.css.
-		if ( file_exists( $style_css_path ) ) {
-			$backup_path = $backup_dir . '/style-' . $timestamp . '.css';
-			copy( $style_css_path, $backup_path );
-			$result['backup'][] = $backup_path;
-		}
-
+		// Backup and overwrite style.css only when CSS content is available.
 		$css = $this->get_global_stylesheet();
 
 		if ( ! empty( $css ) ) {
+			if ( file_exists( $style_css_path ) ) {
+				$backup_path = $backup_dir . '/style-' . $timestamp . '.css';
+
+				if ( copy( $style_css_path, $backup_path ) ) {
+					$result['backup'][] = $backup_path;
+				}
+			}
+
 			if ( $this->write_file( $style_css_path, $css ) ) {
 				$result['written'][] = $style_css_path;
 			}
