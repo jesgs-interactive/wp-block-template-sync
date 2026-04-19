@@ -20,11 +20,16 @@ define( 'WP_BLOCK_TEMPLATE_SYNC_VERSION', '1.0.0' );
 define( 'WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR . 'includes/class-template-sync.php';
+require_once WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR . 'inc/GlobalStylesSync.php';
 
 add_action(
 	'plugins_loaded',
 	function () {
 		$sync = new WpBlockTemplateSync\TemplateSync();
 		$sync->init();
+
+		new WpBlockTemplateSync\GlobalStylesSync();
 	}
 );
+
+require_once WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR . 'inc/cli-global-styles.php';
