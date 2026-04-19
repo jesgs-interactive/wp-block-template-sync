@@ -11,9 +11,9 @@ use Brain\Monkey;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
-use PHPUnit\Framework\TestCase;
-use WpBlockTemplateSync\GlobalStylesSync;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+use WpBlockTemplateSync\includes\GlobalStylesSync;
 
 /**
  * Tests for \WpBlockTemplateSync\GlobalStylesSync.
