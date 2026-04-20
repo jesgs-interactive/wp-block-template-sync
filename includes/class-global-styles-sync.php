@@ -204,10 +204,18 @@ class GlobalStylesSync {
 			}
 		}
 
-		// Clean up multiple blank lines introduced by removals.
-		$css = preg_replace( "/\n{3,}/", "\n\n", $css );
+		// Remove any lines that contain only whitespace (left behind when rules
+		// or declarations were stripped), then collapse long runs of newlines to
+		// a maximum of two so the stylesheet remains readable.
+		$css = preg_replace( '/^[ \t]+\r?\n/m', "\n", $css );
+		$css = preg_replace( '/\r?\n{3,}/', "\n\n", $css );
 
-		return $css;
+		// Also remove completely empty lines (lines with no spaces) that may
+		// remain — this ensures the file doesn't contain large gaps after
+		// pruning.
+		$css = preg_replace( '/^\s*\r?\n/m', "", $css );
+
+		return trim( $css ) . "\n";
 	}
 
 	/**

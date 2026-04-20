@@ -83,5 +83,33 @@ class GlobalStylesHelpersTest extends TestCase {
 		$this->assertStringContainsString( '.has-base-0-color', $out );
 		$this->assertStringNotContainsString( '.has-vivid-cyan-blue-color', $out );
 	}
+
+	#[Test]
+	public function prune_css_removes_empty_lines_after_pruning(): void {
+		$css = "/* header */\n\n:root {\n--wp--preset--color--vivid-cyan-blue: #0693e3;\n--wp--preset--color--base-0: #000;\n}\n\n.has-vivid-cyan-blue-color{color:var(--wp--preset--color--vivid-cyan-blue);}\n\n.has-base-0-color{color:var(--wp--preset--color--base-0);}\n";
+
+		$theme_json = array(
+			'settings' => array(
+				'color' => array(
+					'palette' => array(
+						array( 'slug' => 'base-0', 'color' => '#000' ),
+					),
+				),
+			),
+		);
+
+		$sync = \Mockery::mock( GlobalStylesSync::class )->makePartial()->shouldAllowMockingProtectedMethods();
+
+		$ref = new \ReflectionMethod( $sync, 'prune_css_to_theme_presets' );
+		$ref->setAccessible( true );
+
+		$out = $ref->invoke( $sync, $css, $theme_json );
+
+		// No triple-newline runs
+		$this->assertStringNotContainsString( "\n\n\n", $out );
+
+		// No lines that are only whitespace should remain
+		$this->assertDoesNotMatchRegularExpression( '/^\s*$/m', $out );
+	}
 }
 
