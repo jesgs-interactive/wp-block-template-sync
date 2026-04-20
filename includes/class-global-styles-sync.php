@@ -40,7 +40,45 @@ class GlobalStylesSync {
 		// Admin: register settings & admin page for toggling pruning.
 		add_action( 'admin_menu', array( $this, 'add_admin_page' ) );
 		add_action( 'admin_init', array( $this, 'register_admin_settings' ) );
+
+		// Admin action: manual sync theme.json -> database
+		add_action( 'admin_post_wbts_sync_theme_to_db', array( $this, 'handle_admin_sync' ) );
+
+		// AJAX endpoints and assets for the admin sync UI.
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
+		add_action( 'wp_ajax_wbts_sync_preview', array( $this, 'ajax_preview' ) );
+		add_action( 'wp_ajax_wbts_sync_commit', array( $this, 'ajax_commit' ) );
 	}
+
+	/**
+	 * Enqueue admin JS for the sync UI.
+	 *
+	 * @return void
+	 */
+	public function enqueue_admin_assets(): void {
+		// Only enqueue on our admin page. Use get_current_screen() when
+		// available (more reliable than checking $_GET['page']).
+		if ( function_exists( 'get_current_screen' ) ) {
+			$screen = \get_current_screen();
+			if ( ! $screen || 'appearance_page_wbts-template-sync' !== $screen->id ) {
+				return;
+			}
+		} else {
+			if ( ! isset( $_GET['page'] ) || 'wbts-template-sync' !== $_GET['page'] ) {
+				return;
+			}
+		}
+
+		// Build the script URL relative to this file (includes/ -> ../admin/js/...)
+		$script_url = \plugin_dir_url( __FILE__ ) . '../admin/js/wbts-sync.js';
+		\wp_register_script( 'wbts-sync', $script_url, array(), false, true );
+		\wp_localize_script( 'wbts-sync', 'wbtsSync', array(
+			'ajax_url' => \admin_url( 'admin-ajax.php' ),
+			'nonce'    => \wp_create_nonce( 'wbts_sync_theme_to_db' ),
+		) );
+		\wp_enqueue_script( 'wbts-sync' );
+	}
+
 
 	/**
 	 * Prune generated CSS so it only contains preset variables/classes present in
@@ -786,16 +824,309 @@ class GlobalStylesSync {
 	 * @return void
 	 */
 	public function render_admin_page(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! \current_user_can( 'manage_options' ) ) {
 			echo '<p>Insufficient permissions.</p>';
 			return;
 		}
 
-		echo '<div class="wrap"><h1>WP Block Template Sync</h1><form method="post" action="options.php">';
+		// Show result notice if present.
+		if ( isset( $_GET['wbts_sync_result'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			if ( 'success' === $_GET['wbts_sync_result'] ) {
+				echo '<div class="notice notice-success is-dismissible"><p>Theme files synced to the database successfully.</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>Failed to sync theme files to the database. Check server logs for details.</p></div>';
+			}
+		}
+
+		echo '<div class="wrap"><h1>WP Block Template Sync</h1>';
+		// Settings form
+		echo '<form method="post" action="options.php">';
 		settings_fields( 'wbts_template_sync' );
 		do_settings_sections( 'wbts_template_sync' );
 		submit_button();
-		echo '</form></div>';
+		echo '</form>';
+
+		// Manual sync UI: preview via AJAX then commit via AJAX (fallback to form available).
+		echo '<h2>Manual sync</h2>';
+		echo '<p>If you edit <code>theme.json</code> directly and want to copy its <code>settings</code> and <code>styles</code> into the database (Site Editor global styles), preview the changes and then commit.</p>';
+		echo '<p><button id="wbts-sync-preview" class="button">Preview changes</button> ';
+		echo '<button id="wbts-sync-commit" class="button button-primary" style="display:none">Sync theme.json → Database</button></p>';
+		echo '<div id="wbts-sync-diff" style="margin-top:1rem"></div>';
+		// Non-JS fallback: simple form that posts to admin-post.php
+		echo '<noscript><form method="post" action="' . \esc_url( \admin_url( 'admin-post.php' ) ) . '">';
+		\wp_nonce_field( 'wbts_sync_theme_to_db', 'wbts_sync_nonce' );
+		echo '<input type="hidden" name="action" value="wbts_sync_theme_to_db">';
+		echo '<p><button type="submit" class="button button-primary">Sync theme.json → Database</button></p>';
+		echo '</form></noscript>';
+
+		echo '</div>';
+	}
+
+	/**
+	 * Handle the admin POST that syncs theme.json into the wp_global_styles post
+	 * (and legacy option) for the current theme.
+	 *
+	 * This action is hooked to `admin_post_wbts_sync_theme_to_db` and expects a
+	 * valid nonce and the current user to have the `edit_theme_options` cap.
+	 *
+	 * @return void
+	 */
+	public function handle_admin_sync(): void {
+		if ( ! \current_user_can( 'edit_theme_options' ) ) {
+			\wp_die( 'Insufficient permissions' );
+		}
+
+		if ( ! isset( $_POST['wbts_sync_nonce'] ) || ! \wp_verify_nonce( \wp_unslash( $_POST['wbts_sync_nonce'] ), 'wbts_sync_theme_to_db' ) ) {
+			\wp_die( 'Invalid request' );
+		}
+
+		$stylesheet = \get_stylesheet();
+		$theme_dir  = \get_stylesheet_directory();
+		$theme_json_path = $theme_dir . '/theme.json';
+
+		$success = false;
+
+		if ( file_exists( $theme_json_path ) ) {
+			$raw = file_get_contents( $theme_json_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			$decoded = json_decode( $raw, true );
+
+			if ( is_array( $decoded ) ) {
+				$post_content = \wp_json_encode(
+					array(
+						'version'  => $decoded['version'] ?? 2,
+						'settings' => $decoded['settings'] ?? array(),
+						'styles'   => $decoded['styles'] ?? array(),
+					),
+					JSON_UNESCAPED_SLASHES
+				);
+
+				// Try to find an existing wp_global_styles post for this theme.
+				$post = $this->find_global_styles_post_for_current_theme();
+
+				if ( $post instanceof \WP_Post ) {
+					\wp_update_post( array(
+						'ID' => $post->ID,
+						'post_content' => $post_content,
+					) );
+					$success = true;
+				} else {
+					// Insert as a new wp_global_styles post.
+					$new = \wp_insert_post( array(
+						'post_type' => 'wp_global_styles',
+						'post_status' => 'publish',
+						'post_name' => 'wp-global-styles-' . $stylesheet,
+						'post_title' => 'Global Styles — ' . $stylesheet,
+						'post_content' => $post_content,
+					) );
+
+					if ( $new ) {
+						$success = true;
+					}
+				}
+
+				// Also update legacy option for older WP versions.
+				if ( function_exists( '\update_option' ) ) {
+					\update_option( $this->option_name, $post_content );
+				}
+			}
+		}
+
+		$redirect = \admin_url( 'themes.php?page=wbts-template-sync' );
+		$redirect = \add_query_arg( 'wbts_sync_result', $success ? 'success' : 'fail', $redirect );
+		\wp_safe_redirect( $redirect );
+		exit;
+	}
+
+	/**
+	 * AJAX: return a diff preview between theme.json and the DB/global styles.
+	 *
+	 * Expects: nonce (wbts_sync_theme_to_db)
+	 * Returns JSON { success: bool, diff: string, theme: string, db: string }
+	 */
+	public function ajax_preview(): void {
+		if ( ! \current_user_can( 'edit_theme_options' ) ) {
+			wp_send_json_error( 'insufficient_permissions', 403 );
+		}
+
+		$nonce = $_POST['nonce'] ?? $_GET['nonce'] ?? '';
+		if ( ! \wp_verify_nonce( $nonce, 'wbts_sync_theme_to_db' ) ) {
+			wp_send_json_error( 'invalid_nonce', 400 );
+		}
+
+		$stylesheet = \get_stylesheet();
+		$theme_dir  = \get_stylesheet_directory();
+		$theme_json_path = $theme_dir . '/theme.json';
+
+		$theme_pretty = '';
+		$db_pretty = '';
+		$diff_html = '';
+
+		if ( file_exists( $theme_json_path ) ) {
+			$raw = file_get_contents( $theme_json_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			$decoded = json_decode( $raw, true );
+			if ( is_array( $decoded ) ) {
+				$theme_pretty = \wp_json_encode( array(
+					'version' => $decoded['version'] ?? 2,
+					'settings' => $decoded['settings'] ?? array(),
+					'styles' => $decoded['styles'] ?? array(),
+				), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+			}
+		}
+
+		$post = $this->find_global_styles_post_for_current_theme();
+		if ( $post instanceof \WP_Post ) {
+			$db_pretty = \wp_json_encode( json_decode( $post->post_content, true ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+		} else {
+			// legacy option
+			if ( function_exists( '\get_option' ) ) {
+				$opt = \get_option( $this->option_name, '' );
+				if ( is_string( $opt ) ) {
+					$db_pretty = \wp_json_encode( json_decode( $opt, true ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+				}
+			}
+		}
+
+		$has_changes = false;
+		$diff_html = '';
+
+		if ( $theme_pretty === $db_pretty ) {
+			$has_changes = false;
+			$diff_html = '<pre>No differences</pre>';
+		} else {
+			$has_changes = true;
+			$diff_html = $this->generate_diff_html( $db_pretty, $theme_pretty );
+		}
+
+		wp_send_json_success( array( 'diff' => $diff_html, 'theme' => $theme_pretty, 'db' => $db_pretty, 'has_changes' => $has_changes ) );
+	}
+
+	/**
+	 * AJAX: commit theme.json into the DB (same behaviour as handle_admin_sync),
+	 * but return JSON instead of redirecting.
+	 */
+	public function ajax_commit(): void {
+		if ( ! \current_user_can( 'edit_theme_options' ) ) {
+			wp_send_json_error( 'insufficient_permissions', 403 );
+		}
+
+		$nonce = $_POST['nonce'] ?? '';
+		if ( ! \wp_verify_nonce( $nonce, 'wbts_sync_theme_to_db' ) ) {
+			wp_send_json_error( 'invalid_nonce', 400 );
+		}
+
+		$stylesheet = \get_stylesheet();
+		$theme_dir  = \get_stylesheet_directory();
+		$theme_json_path = $theme_dir . '/theme.json';
+
+		$success = false;
+
+		if ( file_exists( $theme_json_path ) ) {
+			$raw = file_get_contents( $theme_json_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			$decoded = json_decode( $raw, true );
+
+			if ( is_array( $decoded ) ) {
+				$post_content = \wp_json_encode(
+					array(
+						'version'  => $decoded['version'] ?? 2,
+						'settings' => $decoded['settings'] ?? array(),
+						'styles'   => $decoded['styles'] ?? array(),
+					),
+					JSON_UNESCAPED_SLASHES
+				);
+
+				$post = $this->find_global_styles_post_for_current_theme();
+
+				if ( $post instanceof \WP_Post ) {
+					\wp_update_post( array(
+						'ID' => $post->ID,
+						'post_content' => $post_content,
+					) );
+					$success = true;
+				} else {
+					$new = \wp_insert_post( array(
+						'post_type' => 'wp_global_styles',
+						'post_status' => 'publish',
+						'post_name' => 'wp-global-styles-' . $stylesheet,
+						'post_title' => 'Global Styles — ' . $stylesheet,
+						'post_content' => $post_content,
+					) );
+
+					if ( $new ) {
+						$success = true;
+					}
+				}
+
+				if ( function_exists( '\update_option' ) ) {
+					\update_option( $this->option_name, $post_content );
+				}
+			}
+		}
+
+		if ( $success ) {
+			wp_send_json_success( 'synced' );
+		} else {
+			wp_send_json_error( 'failed', 500 );
+		}
+	}
+
+	/**
+	 * Generate a simple HTML diff between two pretty-printed JSON strings.
+	 * Uses an LCS algorithm to mark removed and added lines.
+	 *
+	 * @param string $old
+	 * @param string $new
+	 * @return string HTML fragment with <del> for removals and <ins> for additions.
+	 */
+	protected function generate_diff_html( string $old, string $new ): string {
+		$old_lines = $old === '' ? array() : preg_split("/\r?\n/", $old);
+		$new_lines = $new === '' ? array() : preg_split("/\r?\n/", $new);
+
+		$rows = array();
+		$m = count( $old_lines );
+		$n = count( $new_lines );
+
+		// Build LCS table
+		$dp = array_fill( 0, $m + 1, array_fill( 0, $n + 1, 0 ) );
+		for ( $i = $m - 1; $i >= 0; $i-- ) {
+			for ( $j = $n - 1; $j >= 0; $j-- ) {
+				if ( $old_lines[ $i ] === $new_lines[ $j ] ) {
+					$dp[ $i ][ $j ] = $dp[ $i + 1 ][ $j + 1 ] + 1;
+				} else {
+					$dp[ $i ][ $j ] = max( $dp[ $i + 1 ][ $j ], $dp[ $i ][ $j + 1 ] );
+				}
+			}
+		}
+
+		// Backtrack
+		$i = 0; $j = 0;
+		$html = '<pre class="wbts-diff" style="white-space:pre-wrap;">';
+		while ( $i < $m && $j < $n ) {
+			if ( $old_lines[ $i ] === $new_lines[ $j ] ) {
+				$html .= htmlspecialchars( $old_lines[ $i ] ) . "\n";
+				$i++; $j++;
+			} elseif ( $dp[ $i + 1 ][ $j ] >= $dp[ $i ][ $j + 1 ] ) {
+				// old line removed
+				$html .= '<del style="background:#fdd;display:block;">' . htmlspecialchars( $old_lines[ $i ] ) . '</del>' . "\n";
+				$i++;
+			} else {
+				// new line added
+				$html .= '<ins style="background:#dfd;display:block;">' . htmlspecialchars( $new_lines[ $j ] ) . '</ins>' . "\n";
+				$j++;
+			}
+		}
+
+		while ( $i < $m ) {
+			$html .= '<del style="background:#fdd;display:block;">' . htmlspecialchars( $old_lines[ $i ] ) . '</del>' . "\n";
+			$i++;
+		}
+
+		while ( $j < $n ) {
+			$html .= '<ins style="background:#dfd;display:block;">' . htmlspecialchars( $new_lines[ $j ] ) . '</ins>' . "\n";
+			$j++;
+		}
+
+		$html .= '</pre>';
+		return $html;
 	}
 
 	/**
