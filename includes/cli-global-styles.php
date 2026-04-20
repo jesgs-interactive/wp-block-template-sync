@@ -15,7 +15,7 @@ if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
 WP_CLI::add_command(
 	'block-template-sync sync-global-styles',
 	static function (): void {
-		$sync = new \WpBlockTemplateSync\includes\GlobalStylesSync();
+		$sync = new \WpBlockTemplateSync\GlobalStylesSync();
 		$post = $sync->find_global_styles_post_for_current_theme();
 
 		if ( ! $post ) {

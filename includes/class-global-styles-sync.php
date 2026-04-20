@@ -442,8 +442,8 @@ class GlobalStylesSync {
 
 			// Optional pruning: remove generated preset variables/classes not present
 			// in the merged theme.json. Off by default; can be enabled via filter.
-						$prune_default = (bool) get_option( 'wbts_prune_generated_css', false );
-						if ( apply_filters( 'wbts_prune_generated_css', $prune_default, $theme_json ) ) {
+			$prune_default = (bool) get_option( 'wbts_prune_generated_css', false );
+			if ( apply_filters( 'wbts_prune_generated_css', $prune_default, $theme_json ) ) {
 				$style_content = $this->prune_css_to_theme_presets( $style_content, $theme_json );
 			}
 

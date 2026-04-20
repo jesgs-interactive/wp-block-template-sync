@@ -13,7 +13,7 @@ use Brain\Monkey\Functions;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use WpBlockTemplateSync\includes\GlobalStylesSync;
+use WpBlockTemplateSync\GlobalStylesSync;
 
 /**
  * Tests for \WpBlockTemplateSync\GlobalStylesSync.
