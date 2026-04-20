@@ -170,7 +170,7 @@ class GlobalStylesSync {
 
 		$theme_dir       = get_stylesheet_directory();
 		$theme_json_path = $theme_dir . '/theme.json';
-		$style_css_path  = $theme_dir . '/style.css';
+//		$style_css_path  = $theme_dir . '/style.css';
 
 		$result = array(
 			'backup'  => array(),
@@ -248,21 +248,21 @@ class GlobalStylesSync {
 		}
 
 		// Backup and overwrite style.css only when CSS content is available.
-		$css = $this->get_global_stylesheet();
-
-		if ( ! empty( $css ) ) {
-			if ( file_exists( $style_css_path ) ) {
-				$backup_path = $backup_dir . '/style-' . $timestamp . '.css';
-
-				if ( copy( $style_css_path, $backup_path ) ) {
-					$result['backup'][] = $backup_path;
-				}
-			}
-
-			if ( $this->write_file( $style_css_path, $css ) ) {
-				$result['written'][] = $style_css_path;
-			}
-		}
+//		$css = $this->get_global_stylesheet();
+//
+//		if ( ! empty( $css ) ) {
+//			if ( file_exists( $style_css_path ) ) {
+//				$backup_path = $backup_dir . '/style-' . $timestamp . '.css';
+//
+//				if ( copy( $style_css_path, $backup_path ) ) {
+//					$result['backup'][] = $backup_path;
+//				}
+//			}
+//
+//			if ( $this->write_file( $style_css_path, $css ) ) {
+//				$result['written'][] = $style_css_path;
+//			}
+//		}
 
 		return $result;
 	}
