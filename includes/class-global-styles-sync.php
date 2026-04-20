@@ -23,6 +23,13 @@ class GlobalStylesSync {
 	protected string $option_name;
 
 	/**
+	 * Last warnings produced by the normalizer (for diagnostics).
+	 *
+	 * @var string[]
+	 */
+	protected array $last_normalize_warnings = array();
+
+	/**
 	 * Register WordPress action hooks.
 	 */
 	public function __construct() {
@@ -380,10 +387,20 @@ class GlobalStylesSync {
 	 * @return array{backup: string[], written: string[]} Paths that were backed up and written.
 	 */
 	public function sync_to_theme( string $content ): array {
-		$global_styles = json_decode( $content, true );
+		// Prepare the default result structure early so we can return on decode failure
+		// without depending on later initialisation.
+		$result = array(
+			'backup' => array(),
+			'written' => array(),
+		);
+
+		$global_styles = $this->safe_json_decode( $content );
 
 		if ( ! is_array( $global_styles ) ) {
-			$global_styles = array();
+			// If we couldn't decode the provided DB content, abort sync to avoid
+			// overwriting the theme.json with empty values. Record a warning for diagnostics.
+			$this->last_normalize_warnings[] = 'sync_to_theme aborted: failed to decode database global styles content.';
+			return $result;
 		}
 
 		$theme_dir       = get_stylesheet_directory();
@@ -738,9 +755,21 @@ class GlobalStylesSync {
 	 */
 	protected function normalize_global_styles_for_theme_json( array $global_styles ): array {
 		// Fields inside settings that WordPress may group by origin.
+		// WordPress may store these presets keyed by origin (theme/default/custom/blocks)
+		// in the database, whereas theme.json expects flat sequential arrays. Normalize
+		// by extracting the "theme" (or custom/first) origin so shapes match before merging.
 		$grouped_fields = array(
 			'color'      => array( 'palette', 'gradients', 'duotone' ),
 			'typography' => array( 'fontSizes', 'fontFamilies' ),
+			// Shadow presets were introduced in core (settings.shadow.presets).
+			// The DB may store them keyed by origin; treat them like other presets.
+			// Include both editable presets and the "defaultPresets" slot that
+			// WordPress uses to track changes to built-in defaults.
+			'shadow'     => array( 'presets', 'defaultPresets' ),
+			// Additional preset-like fields that may be keyed by origin in the DB.
+			'spacing'    => array( 'spacingSizes', 'spacingScale' ),
+			'border'     => array( 'radiusSizes' ),
+			'dimensions' => array( 'aspectRatios' ),
 		);
 
 		foreach ( $grouped_fields as $section => $fields ) {
@@ -759,15 +788,126 @@ class GlobalStylesSync {
 				// It is an associative (origin-grouped) array. Extract "theme" origin
 				// if present; otherwise try "custom", then fall back to the first value.
 				if ( isset( $value['theme'] ) && is_array( $value['theme'] ) ) {
-					$global_styles['settings'][ $section ][ $field ] = $value['theme'];
+					$v = $value['theme'];
 				} elseif ( isset( $value['custom'] ) && is_array( $value['custom'] ) ) {
-					$global_styles['settings'][ $section ][ $field ] = $value['custom'];
+					$v = $value['custom'];
 				} else {
-					$first = reset( $value );
-					$global_styles['settings'][ $section ][ $field ] = is_array( $first ) ? $first : array();
+					$v = reset( $value );
+				}
+
+				// If the extracted value is an associative map keyed by slug, convert
+				// it to a sequential array of its values so theme.json receives the
+				// expected array shape (presets are arrays of objects).
+				if ( is_array( $v ) && ! $this->is_sequential_array( $v ) ) {
+					// If every child is an array, keep their values.
+					$all_children_arrays = true;
+					foreach ( $v as $child ) {
+						if ( ! is_array( $child ) ) {
+							$all_children_arrays = false;
+							break;
+						}
+					}
+
+					if ( $all_children_arrays ) {
+						$v = array_values( $v );
+					} else {
+						// Special-case: shadow presets may be stored as slug => shadow-string.
+						if ( 'shadow' === $section && 'presets' === $field ) {
+							$converted = array();
+							foreach ( $v as $slug => $child ) {
+								if ( is_array( $child ) ) {
+									$item = $child;
+									if ( ! isset( $item['slug'] ) ) {
+										$item['slug'] = $slug;
+									}
+								} else {
+									$item = array( 'slug' => $slug, 'shadow' => (string) $child );
+								}
+								$converted[] = $item;
+							}
+							$v = $converted;
+						} else {
+							// Not an array-of-arrays; coerce to empty to avoid schema errors.
+							$v = array();
+						}
+					}
+				}
+
+				$global_styles['settings'][ $section ][ $field ] = is_array( $v ) ? $v : array();
+			}
+		}
+
+		// Post-normalization verification: ensure each listed field is a sequential
+		// array (theme.json expects arrays for presets). If something remains
+		// associative, attempt to extract an origin again; otherwise coerce to an
+		// empty array and record a warning so callers can surface diagnostics.
+		$warnings = array();
+		foreach ( $grouped_fields as $section => $fields ) {
+			foreach ( $fields as $field ) {
+				if ( ! isset( $global_styles['settings'][ $section ][ $field ] ) ) {
+					continue;
+				}
+
+				$val = $global_styles['settings'][ $section ][ $field ];
+
+				if ( is_array( $val ) && ! $this->is_sequential_array( $val ) ) {
+					// Try to extract origins again.
+					$extracted = null;
+					if ( isset( $val['theme'] ) && is_array( $val['theme'] ) ) {
+						$extracted = $val['theme'];
+					} elseif ( isset( $val['custom'] ) && is_array( $val['custom'] ) ) {
+						$extracted = $val['custom'];
+					} else {
+						$extracted = reset( $val );
+					}
+
+					if ( is_array( $extracted ) ) {
+						if ( $this->is_sequential_array( $extracted ) ) {
+							$global_styles['settings'][ $section ][ $field ] = $extracted;
+							continue;
+						}
+
+						// If associative but contains array children, convert to sequential.
+						$all_children_arrays = true;
+						foreach ( $extracted as $child ) {
+							if ( ! is_array( $child ) ) {
+								$all_children_arrays = false;
+								break;
+							}
+						}
+
+						if ( $all_children_arrays ) {
+							$global_styles['settings'][ $section ][ $field ] = array_values( $extracted );
+							continue;
+						}
+
+						// Special-case: shadow presets may be stored as slug => shadow-string.
+						if ( 'shadow' === $section && 'presets' === $field ) {
+							$converted = array();
+							foreach ( $extracted as $slug => $child ) {
+								if ( is_array( $child ) ) {
+									$item = $child;
+									if ( ! isset( $item['slug'] ) ) {
+										$item['slug'] = $slug;
+									}
+								} else {
+									$item = array( 'slug' => $slug, 'shadow' => (string) $child );
+								}
+								$converted[] = $item;
+							}
+							$global_styles['settings'][ $section ][ $field ] = $converted;
+							continue;
+						}
+					}
+
+					// Couldn't coerce to a sequential array — clear it to avoid schema errors.
+					$global_styles['settings'][ $section ][ $field ] = array();
+					$warnings[] = sprintf( "Normalized settings.%s.%s: coerced non-sequential value to empty array.", $section, $field );
 				}
 			}
 		}
+
+		$this->last_normalize_warnings = $warnings;
 
 		return $global_styles;
 	}
@@ -973,15 +1113,38 @@ class GlobalStylesSync {
 			}
 		}
 
+		$normalization_warnings = array();
 		$post = $this->find_global_styles_post_for_current_theme();
 		if ( $post instanceof \WP_Post ) {
-			$db_pretty = \wp_json_encode( json_decode( $post->post_content, true ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+			$db_arr = $this->safe_json_decode( $post->post_content );
+			if ( is_array( $db_arr ) ) {
+				// Normalize DB-shaped global styles so origin-keyed presets become arrays.
+				$db_arr = $this->normalize_global_styles_for_theme_json( $db_arr );
+				$normalization_warnings = $this->last_normalize_warnings;
+				$db_pretty = \wp_json_encode( array(
+					'version'  => $db_arr['version'] ?? 2,
+					'settings' => $db_arr['settings'] ?? array(),
+					'styles'   => $db_arr['styles'] ?? array(),
+				), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+			} else {
+				// If decoding failed, emit a warning so the UI can surface the issue.
+				$normalization_warnings[] = 'Failed to decode wp_global_styles post_content; it may contain invalid JSON.';
+			}
 		} else {
 			// legacy option
-			if ( function_exists( '\get_option' ) ) {
+			if ( function_exists( '\\get_option' ) ) {
 				$opt = \get_option( $this->option_name, '' );
 				if ( is_string( $opt ) ) {
-					$db_pretty = \wp_json_encode( json_decode( $opt, true ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+					$opt_arr = json_decode( $opt, true );
+					if ( is_array( $opt_arr ) ) {
+						$opt_arr = $this->normalize_global_styles_for_theme_json( $opt_arr );
+						$normalization_warnings = $this->last_normalize_warnings;
+						$db_pretty = \wp_json_encode( array(
+							'version'  => $opt_arr['version'] ?? 2,
+							'settings' => $opt_arr['settings'] ?? array(),
+							'styles'   => $opt_arr['styles'] ?? array(),
+						), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+					}
 				}
 			}
 		}
@@ -997,7 +1160,18 @@ class GlobalStylesSync {
 			$diff_html = $this->generate_diff_html( $db_pretty, $theme_pretty );
 		}
 
-		wp_send_json_success( array( 'diff' => $diff_html, 'theme' => $theme_pretty, 'db' => $db_pretty, 'has_changes' => $has_changes ) );
+		$response = array(
+			'diff' => $diff_html,
+			'theme' => $theme_pretty,
+			'db' => $db_pretty,
+			'has_changes' => $has_changes,
+		);
+
+		if ( ! empty( $normalization_warnings ) ) {
+			$response['normalization_warnings'] = $normalization_warnings;
+		}
+
+		wp_send_json_success( $response );
 	}
 
 	/**
@@ -1145,5 +1319,61 @@ class GlobalStylesSync {
 		}
 
 		return (bool) $wp_filesystem->put_contents( $file_path, $content, FS_CHMOD_FILE );
+	}
+
+	/**
+	 * Try to decode JSON robustly from a string that may contain HTML or stray
+	 * characters (for example if a DB post_content was accidentally polluted
+	 * with diff HTML). Attempts several strategies: direct decode, balanced
+	 * braces extraction, and stripped-tags extraction.
+	 *
+	 * @param string $raw Raw content to decode.
+	 * @return array|null Decoded array on success, or null on failure.
+	 */
+	protected function safe_json_decode( string $raw ): ?array {
+		if ( '' === $raw ) {
+			return null;
+		}
+
+		// Direct attempt first.
+		$decoded = json_decode( $raw, true );
+		if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
+			return $decoded;
+		}
+
+		// Try to extract a balanced JSON object from the string (first { .. matching }).
+		$start = strpos( $raw, '{' );
+		if ( false !== $start ) {
+			$depth = 0;
+			$len = strlen( $raw );
+			for ( $i = $start; $i < $len; $i++ ) {
+				$ch = $raw[ $i ];
+				if ( '{' === $ch ) {
+					$depth++;
+				} elseif ( '}' === $ch ) {
+					$depth--;
+					if ( 0 === $depth ) {
+						$substr = substr( $raw, $start, $i - $start + 1 );
+						$decoded = json_decode( $substr, true );
+						if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
+							$this->last_normalize_warnings[] = 'Recovered JSON by extracting balanced braces from content.';
+							return $decoded;
+						}
+						break;
+					}
+				}
+			}
+		}
+
+		// As a last resort, strip HTML tags and try again.
+		$stripped = strip_tags( $raw );
+		$decoded = json_decode( $stripped, true );
+		if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
+			$this->last_normalize_warnings[] = 'Recovered JSON after stripping HTML tags from content.';
+			return $decoded;
+		}
+
+		// Nothing worked.
+		return null;
 	}
 }
