@@ -1,0 +1,72 @@
+name: Release on tag
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get tag
+        id: get_tag
+        run: |
+          echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Update version in wp-block-template-sync.php (lines 6 and 19)
+        run: |
+          # strip leading v for numeric version string used inside the file
+          TAG_STRIPPED="${TAG#v}"
+          export TAG_STRIPPED
+          python3 - <<'PY'
+import re, os
+from pathlib import Path
+tag_stripped = os.environ.get("TAG_STRIPPED", "")
+f = Path('wp-block-template-sync.php')
+text = f.read_text()
+lines = text.splitlines()
+for idx in (5, 18):  # zero-based indices for lines 6 and 19
+    if idx < len(lines):
+        # Replace first occurrence of a version-like pattern on the line
+        lines[idx] = re.sub(r"(\d+\.\d+(?:\.\d+)?)", tag_stripped, lines[idx], count=1)
+f.write_text("\n".join(lines) + "\n")
+PY
+
+      - name: Create release ZIP (exclude dev files)
+        run: |
+          OUT=wp-block-template-sync.zip
+          # list tracked files and exclude the patterns then zip
+          git ls-files -z \
+            | xargs -0 printf "%s\n" \
+            | grep -v -E '^(\.editorconfig|\.gitignore|composer\.json|composer\.lock|phpunit\.xml|tests/|vendor/)' \
+            | zip -@ "$OUT"
+          echo "RELEASE_ASSET=$OUT" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ env.TAG }}
+          release_name: ${{ env.TAG }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ env.RELEASE_ASSET }}
+          asset_name: ${{ env.RELEASE_ASSET }}
+          asset_content_type: application/zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
