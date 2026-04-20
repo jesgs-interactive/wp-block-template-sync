@@ -36,6 +36,178 @@ class GlobalStylesSync {
 
 		// Also sync when the active theme changes.
 		add_action( 'after_switch_theme', array( $this, 'on_after_switch_theme' ) );
+
+		// Admin: register settings & admin page for toggling pruning.
+		add_action( 'admin_menu', array( $this, 'add_admin_page' ) );
+		add_action( 'admin_init', array( $this, 'register_admin_settings' ) );
+	}
+
+	/**
+	 * Prune generated CSS so it only contains preset variables/classes present in
+	 * the merged theme.json. Useful when you want the generated stylesheet to
+	 * reflect only the presets the theme actually defines (optional; off by
+	 * default).
+	 *
+	 * @param string $css The formatted/generated CSS.
+	 * @param array  $theme_json The merged theme.json array.
+	 * @return string Pruned CSS.
+	 */
+	protected function prune_css_to_theme_presets( string $css, array $theme_json ): string {
+		$allowed_color_slugs = array();
+		$allowed_gradient_slugs = array();
+		$allowed_fontsize_slugs = array();
+		$allowed_fontfamily_slugs = array();
+		$allowed_duotone_slugs = array();
+
+		$settings = $theme_json['settings'] ?? array();
+
+		// Palette
+		$palette = $settings['color']['palette'] ?? array();
+		if ( is_array( $palette ) ) {
+			foreach ( $palette as $item ) {
+				if ( isset( $item['slug'] ) ) {
+					$allowed_color_slugs[] = $item['slug'];
+				}
+			}
+		}
+
+		// Gradients
+		$gradients = $settings['color']['gradients'] ?? array();
+		if ( is_array( $gradients ) ) {
+			foreach ( $gradients as $g ) {
+				if ( isset( $g['slug'] ) ) {
+					$allowed_gradient_slugs[] = $g['slug'];
+				}
+			}
+		}
+
+		// Font sizes
+		$fontSizes = $settings['typography']['fontSizes'] ?? array();
+		if ( is_array( $fontSizes ) ) {
+			foreach ( $fontSizes as $fs ) {
+				if ( isset( $fs['slug'] ) ) {
+					$allowed_fontsize_slugs[] = $fs['slug'];
+				}
+			}
+		}
+
+		// Font families
+		$fontFamilies = $settings['typography']['fontFamilies'] ?? array();
+		if ( is_array( $fontFamilies ) ) {
+			foreach ( $fontFamilies as $ff ) {
+				if ( isset( $ff['slug'] ) ) {
+					$allowed_fontfamily_slugs[] = $ff['slug'];
+				}
+			}
+		}
+
+		// Duotone
+		$duotone = $settings['color']['duotone'] ?? array();
+		if ( is_array( $duotone ) ) {
+			foreach ( $duotone as $d ) {
+				if ( isset( $d['slug'] ) ) {
+					$allowed_duotone_slugs[] = $d['slug'];
+				}
+			}
+		}
+
+		// Helper closures
+		$is_allowed_color = function( $slug ) use ( $allowed_color_slugs ) {
+			return in_array( $slug, $allowed_color_slugs, true );
+		};
+		$is_allowed_gradient = function( $slug ) use ( $allowed_gradient_slugs ) {
+			return in_array( $slug, $allowed_gradient_slugs, true );
+		};
+		$is_allowed_fontsize = function( $slug ) use ( $allowed_fontsize_slugs ) {
+			return in_array( $slug, $allowed_fontsize_slugs, true );
+		};
+		$is_allowed_fontfamily = function( $slug ) use ( $allowed_fontfamily_slugs ) {
+			return in_array( $slug, $allowed_fontfamily_slugs, true );
+		};
+		$is_allowed_duotone = function( $slug ) use ( $allowed_duotone_slugs ) {
+			return in_array( $slug, $allowed_duotone_slugs, true );
+		};
+
+		// Remove CSS custom properties for color presets not in the whitelist.
+		$css = preg_replace_callback(
+			'/--wp--preset--color--([a-z0-9_-]+)\s*:\s*[^;]+;/i',
+			function( $m ) use ( $is_allowed_color ) {
+				$slug = $m[1];
+				return $is_allowed_color( $slug ) ? $m[0] : '';
+			},
+			$css
+		);
+
+		// Gradients
+		$css = preg_replace_callback(
+			'/--wp--preset--gradient--([a-z0-9_-]+)\s*:\s*[^;]+;/i',
+			function( $m ) use ( $is_allowed_gradient ) {
+				$slug = $m[1];
+				return $is_allowed_gradient( $slug ) ? $m[0] : '';
+			},
+			$css
+		);
+
+		// Font sizes
+		$css = preg_replace_callback(
+			'/--wp--preset--font-size--([a-z0-9_-]+)\s*:\s*[^;]+;/i',
+			function( $m ) use ( $is_allowed_fontsize ) {
+				$slug = $m[1];
+				return $is_allowed_fontsize( $slug ) ? $m[0] : '';
+			},
+			$css
+		);
+
+		// Font families
+		$css = preg_replace_callback(
+			'/--wp--preset--font-family--([a-z0-9_-]+)\s*:\s*[^;]+;/i',
+			function( $m ) use ( $is_allowed_fontfamily ) {
+				$slug = $m[1];
+				return $is_allowed_fontfamily( $slug ) ? $m[0] : '';
+			},
+			$css
+		);
+
+		// Duotone
+		$css = preg_replace_callback(
+			'/--wp--preset--duotone--([a-z0-9_-]+)\s*:\s*[^;]+;/i',
+			function( $m ) use ( $is_allowed_duotone ) {
+				$slug = $m[1];
+				return $is_allowed_duotone( $slug ) ? $m[0] : '';
+			},
+			$css
+		);
+
+		// Remove helper classes for presets that are not allowed. Detect all
+		// color-like slugs present in the CSS and remove corresponding helper
+		// class rules for disallowed slugs.
+		$all_color_slugs = array();
+		if ( preg_match_all( '/--wp--preset--color--([a-z0-9_-]+)/i', $css, $m ) ) {
+			$all_color_slugs = array_unique( $m[1] );
+		}
+
+		$disallowed_colors = array_diff( $all_color_slugs, $allowed_color_slugs );
+
+		foreach ( $disallowed_colors as $slug ) {
+			$slug_q = preg_quote( $slug, '/' );
+			$patterns = array(
+				'/\.has-' . $slug_q . '-color\s*\{[^}]*\}/i',
+				'/\.has-' . $slug_q . '-background-color\s*\{[^}]*\}/i',
+				'/\.has-' . $slug_q . '-border-color\s*\{[^}]*\}/i',
+				'/\.has-' . $slug_q . '-gradient-background\s*\{[^}]*\}/i',
+				'/\.has-' . $slug_q . '-font-size\s*\{[^}]*\}/i',
+				'/\.has-' . $slug_q . '-font-family\s*\{[^}]*\}/i',
+			);
+
+			foreach ( $patterns as $pat ) {
+				$css = preg_replace( $pat, '', $css );
+			}
+		}
+
+		// Clean up multiple blank lines introduced by removals.
+		$css = preg_replace( "/\n{3,}/", "\n\n", $css );
+
+		return $css;
 	}
 
 	/**
@@ -170,7 +342,7 @@ class GlobalStylesSync {
 
 		$theme_dir       = get_stylesheet_directory();
 		$theme_json_path = $theme_dir . '/theme.json';
-//		$style_css_path  = $theme_dir . '/style.css';
+		$style_css_path  = $theme_dir . '/style.css';
 
 		$result = array(
 			'backup'  => array(),
@@ -248,23 +420,190 @@ class GlobalStylesSync {
 		}
 
 		// Backup and overwrite style.css only when CSS content is available.
-//		$css = $this->get_global_stylesheet();
-//
-//		if ( ! empty( $css ) ) {
-//			if ( file_exists( $style_css_path ) ) {
-//				$backup_path = $backup_dir . '/style-' . $timestamp . '.css';
-//
-//				if ( copy( $style_css_path, $backup_path ) ) {
-//					$result['backup'][] = $backup_path;
-//				}
-//			}
-//
-//			if ( $this->write_file( $style_css_path, $css ) ) {
-//				$result['written'][] = $style_css_path;
-//			}
-//		}
+		$css = $this->get_global_stylesheet();
+
+		if ( ! empty( $css ) ) {
+			// Always preserve the theme-header comment that WordPress requires for
+			// a theme to be recognised as valid. Extract it from the existing file
+			// before we overwrite anything.
+			$theme_header = '';
+
+			$existing_style = '';
+			if ( file_exists( $style_css_path ) ) {
+				$existing_style = file_get_contents( $style_css_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+				$theme_header    = $this->extract_style_header( $existing_style );
+			}
+
+			// Format the minified CSS output so the file stays human-readable.
+			$formatted_css = $this->format_css( $css );
+
+			// Combine: header (with trailing newline) + blank separator + formatted CSS.
+			$style_content = rtrim( $theme_header ) . "\n\n" . $formatted_css;
+
+			// Optional pruning: remove generated preset variables/classes not present
+			// in the merged theme.json. Off by default; can be enabled via filter.
+						$prune_default = (bool) get_option( 'wbts_prune_generated_css', false );
+						if ( apply_filters( 'wbts_prune_generated_css', $prune_default, $theme_json ) ) {
+				$style_content = $this->prune_css_to_theme_presets( $style_content, $theme_json );
+			}
+
+			// Allow consumers to disable writing the stylesheet entirely.
+			if ( ! apply_filters( 'wbts_write_style_css', true, $style_content, $theme_json ) ) {
+				// Skip writing CSS but still return the result for theme.json.
+				$noop = true; // explicit no-op to satisfy linters
+			} else {
+				// If content hasn't changed, skip backup and write to avoid touching timestamps.
+				if ( $existing_style === $style_content ) {
+					// No change — do nothing.
+					$noop = true; // explicit no-op to satisfy linters
+				} else {
+					if ( file_exists( $style_css_path ) ) {
+						$backup_path = $backup_dir . '/style-' . $timestamp . '.css';
+
+						if ( copy( $style_css_path, $backup_path ) ) {
+							$result['backup'][] = $backup_path;
+						}
+					}
+
+					if ( $this->write_file( $style_css_path, $style_content ) ) {
+						$result['written'][] = $style_css_path;
+					}
+				}
+			}
+		}
 
 		return $result;
+	}
+
+	/**
+	 * Extract the opening block comment from a style.css file.
+	 *
+	 * WordPress requires the theme-header comment (Theme Name, Version, etc.)
+	 * at the top of style.css to recognise the theme as valid. This method
+	 * returns everything up to and including the closing `*\/` so it can be
+	 * prepended to any regenerated stylesheet content.
+	 *
+	 * Returns an empty string when no opening comment is found.
+	 *
+	 * @param string $css Raw content of the existing style.css.
+	 * @return string The header comment block, or an empty string.
+	 */
+	protected function extract_style_header( string $css ): string {
+		$start = strpos( $css, '/*' );
+
+		if ( false === $start ) {
+			return '';
+		}
+
+		$end = strpos( $css, '*/', $start );
+
+		if ( false === $end ) {
+			return '';
+		}
+
+		return substr( $css, $start, $end - $start + 2 ) . "\n";
+	}
+
+	/**
+	 * Format minified CSS into readable, indented multi-line output.
+	 *
+	 * wp_get_global_stylesheet() returns minified CSS. This method inserts
+	 * newlines and indentation so the written file is easy to diff and read.
+	 *
+	 * @param string $css Minified CSS string.
+	 * @return string Formatted CSS string.
+	 */
+	protected function format_css( string $css ): string {
+		$output     = '';
+		$indent     = 0;
+		$tab        = "\t";
+		$length     = strlen( $css );
+		$in_string  = false;
+		$string_char = '';
+		$in_comment = false;
+		$i          = 0;
+
+		while ( $i < $length ) {
+			$char = $css[ $i ];
+			$next = $i + 1 < $length ? $css[ $i + 1 ] : '';
+
+			// Track block comments so we don't mangle their content.
+			if ( ! $in_string && ! $in_comment && '/' === $char && '*' === $next ) {
+				$in_comment = true;
+				$output    .= $char;
+				$i++;
+				continue;
+			}
+
+			if ( $in_comment ) {
+				$output .= $char;
+
+				if ( '*' === $char && '/' === $next ) {
+					$output    .= '/';
+					$i         += 2;
+					$in_comment = false;
+					$output    .= "\n" . str_repeat( $tab, $indent );
+					continue;
+				}
+
+				$i++;
+				continue;
+			}
+
+			// Track quoted strings so braces inside them are not treated as rules.
+			if ( ! $in_string && ( '"' === $char || "'" === $char ) ) {
+				$in_string   = true;
+				$string_char = $char;
+				$output     .= $char;
+				$i++;
+				continue;
+			}
+
+			if ( $in_string ) {
+				$output .= $char;
+
+				if ( $char === $string_char && ( $i === 0 || '\\' !== $css[ $i - 1 ] ) ) {
+					$in_string = false;
+				}
+
+				$i++;
+				continue;
+			}
+
+			if ( '{' === $char ) {
+				$output .= " {\n";
+				$indent++;
+				$output .= str_repeat( $tab, $indent );
+			} elseif ( '}' === $char ) {
+				$indent  = max( 0, $indent - 1 );
+				// Remove trailing whitespace/tab before the closing brace.
+				$output  = rtrim( $output ) . "\n";
+				$output .= str_repeat( $tab, $indent ) . "}\n";
+
+				if ( $indent > 0 ) {
+					$output .= str_repeat( $tab, $indent );
+				} else {
+					$output .= "\n";
+				}
+			} elseif ( ';' === $char ) {
+				$output .= ";\n" . str_repeat( $tab, $indent );
+			} elseif ( ',' === $char && preg_match( '/[}\s]/', $next ) ) {
+				// Selector list — break after comma when followed by whitespace or `}`.
+				$output .= ",\n" . str_repeat( $tab, $indent );
+			} elseif ( ' ' === $char || "\t" === $char || "\n" === $char || "\r" === $char ) {
+				// Collapse runs of whitespace to a single space (except after `;` / `{`
+				// where we have already emitted a newline).
+				if ( ! in_array( substr( $output, -1 ), array( "\n", "\t", ' ', '{' ), true ) ) {
+					$output .= ' ';
+				}
+			} else {
+				$output .= $char;
+			}
+
+			$i++;
+		}
+
+		return trim( $output ) . "\n";
 	}
 
 	/**
@@ -385,6 +724,70 @@ class GlobalStylesSync {
 		}
 
 		return $global_styles;
+	}
+
+	/**
+	 * Register the admin submenu page under Appearance for plugin settings.
+	 *
+	 * @return void
+	 */
+	public function add_admin_page(): void {
+		add_submenu_page(
+			'themes.php',
+			'WP Block Template Sync',
+			'Template Sync',
+			'manage_options',
+			'wbts-template-sync',
+			array( $this, 'render_admin_page' )
+		);
+	}
+
+	/**
+	 * Register admin settings and fields.
+	 *
+	 * @return void
+	 */
+	public function register_admin_settings(): void {
+		register_setting( 'wbts_template_sync', 'wbts_prune_generated_css', array(
+			'type' => 'boolean',
+			'sanitize_callback' => function ( $v ) {
+				return (bool) $v;
+			},
+		) );
+
+		add_settings_section( 'wbts_main', 'WP Block Template Sync', function () {
+			echo '<p>Settings for WP Block Template Sync.</p>';
+		}, 'wbts_template_sync' );
+
+		add_settings_field( 'wbts_prune_generated_css', 'Prune generated CSS', array( $this, 'render_prune_field' ), 'wbts_template_sync', 'wbts_main' );
+	}
+
+	/**
+	 * Render the prune checkbox field.
+	 *
+	 * @return void
+	 */
+	public function render_prune_field(): void {
+		$val = (bool) get_option( 'wbts_prune_generated_css', false );
+		echo '<label><input type="checkbox" name="wbts_prune_generated_css" value="1"' . ( $val ? ' checked' : '' ) . '> Prune generated CSS to theme presets only</label>';
+	}
+
+	/**
+	 * Render the admin settings page.
+	 *
+	 * @return void
+	 */
+	public function render_admin_page(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			echo '<p>Insufficient permissions.</p>';
+			return;
+		}
+
+		echo '<div class="wrap"><h1>WP Block Template Sync</h1><form method="post" action="options.php">';
+		settings_fields( 'wbts_template_sync' );
+		do_settings_sections( 'wbts_template_sync' );
+		submit_button();
+		echo '</form></div>';
 	}
 
 	/**

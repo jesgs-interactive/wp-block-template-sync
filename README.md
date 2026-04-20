@@ -30,6 +30,26 @@ When you save changes in the **Styles** panel of the Site Editor the plugin:
 
 The sync also fires on the `after_switch_theme` hook so the files reflect the correct styles immediately after a theme is activated.
 
+### Options & Filters
+
+- `wbts_prune_generated_css` (bool) — When enabled the plugin will prune the generated `style.css` so it only contains preset variables and helper classes that are present in the merged `theme.json`. This is OFF by default to preserve editor and plugin compatibility. Enable with:
+
+You can enable pruning either by the filter above or via the plugin admin UI at Appearance → Template Sync. The admin page exposes a single checkbox labeled "Prune generated CSS to theme presets only".
+
+Programmatic enabling (example):
+
+```php
+add_filter( 'wbts_prune_generated_css', '__return_true' );
+```
+
+- `wbts_write_style_css` (bool) — Allows consumers to completely disable writing `style.css` (the plugin will still write `theme.json` unless disabled separately). Defaults to `true`.
+
+```php
+add_filter( 'wbts_write_style_css', '__return_false' );
+```
+
+- The plugin also avoids touching `style.css` when the newly generated content is identical to the existing file (avoids unnecessary backups and timestamp changes).
+
 ## Requirements
 
 - WordPress 6.0 or later
