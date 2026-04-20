@@ -4,7 +4,7 @@ A WordPress plugin that syncs changes to theme templates in the Site Editor with
 
 ## Description
 
-When you edit a block theme template or template part in the WordPress **Site Editor** (Appearance → Editor) and save it, WordPress stores the updated markup in the database. This plugin listens for those REST API save events and writes the new block markup back to the corresponding HTML file in your theme directory — keeping your theme's source files in sync with Site Editor customisations.
+When you edit a block theme template, template part, or global styles in the WordPress **Site Editor** (Appearance → Editor) and save them, WordPress stores the changes in the database. This plugin listens for those save events and writes the changes back to the corresponding files in your theme directory — keeping your theme's source files in sync with Site Editor customisations.
 
 **Note:** Due to the headaches of dealing with filesystem permissions and potential security issues, this plugin is __intended for local development only__.
 
@@ -14,8 +14,21 @@ When you edit a block theme template or template part in the WordPress **Site Ed
 |---|---|
 | Template (`wp_template`) | Writes to `{theme}/templates/{slug}.html` |
 | Template part (`wp_template_part`) | Writes to `{theme}/parts/{slug}.html` |
+| Global Styles (`wp_global_styles`) | Deep-merges into `{theme}/theme.json`; regenerates `{theme}/style.css` |
 
-The plugin only syncs templates that belong to the **currently active (child) theme** and requires the saving user to have the `edit_theme_options` capability (Administrator by default).
+The plugin only syncs templates and styles that belong to the **currently active (child) theme** and requires the saving user to have the `edit_theme_options` capability (Administrator by default).
+
+### Global Styles sync
+
+When you save changes in the **Styles** panel of the Site Editor the plugin:
+
+1. Reads the existing `theme.json` from disk so that non-style keys (`templateParts`, `customTemplates`, `patterns`, etc.) are preserved.
+2. Normalises the database representation — WordPress groups palette, gradients, duotone, font sizes and font families by origin (`theme`, `default`, `custom`); the plugin extracts the `theme` origin so the shape matches what `theme.json` expects.
+3. Deep-merges the normalised `settings` and `styles` values on top of the existing file. Associative objects are merged key-by-key (preserving the original key order for clean diffs); sequential arrays such as `palette` entries are replaced wholesale.
+4. Backs up the previous `theme.json` and `style.css` into `{theme}/.global-styles-backups/` before writing.
+5. Writes the merged `theme.json` and a regenerated `style.css` via `wp_get_global_stylesheet()`.
+
+The sync also fires on the `after_switch_theme` hook so the files reflect the correct styles immediately after a theme is activated.
 
 ## Requirements
 
@@ -48,8 +61,9 @@ composer test
 
 - Only users with the `edit_theme_options` capability can trigger a sync.
 - Template slugs are validated to prevent path-traversal attacks.
-- Only templates belonging to the currently active theme are written.
+- Only templates and styles belonging to the currently active theme are written.
 - Files are written via the [WordPress Filesystem API](https://developer.wordpress.org/apis/filesystem/).
+- Automatic backups of `theme.json` and `style.css` are kept in `{theme}/.global-styles-backups/` before every overwrite.
 
 ## License
 
