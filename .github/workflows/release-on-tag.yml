@@ -42,7 +42,7 @@ PY
 
       - name: Create release ZIP (exclude dev files)
         run: |
-          OUT=wp-block-template-sync-${TAG}.zip
+          OUT=wp-block-template-sync.zip
           # list tracked files and exclude the patterns then zip
           git ls-files -z \
             | xargs -0 printf "%s\n" \
