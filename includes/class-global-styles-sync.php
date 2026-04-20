@@ -153,8 +153,9 @@ class GlobalStylesSync {
 	 * Write the global styles from the given JSON content into theme.json and style.css.
 	 *
 	 * Backs up existing theme.json and style.css into `.global-styles-backups/`
-	 * before overwriting. Writes theme.json with version=2 plus the `settings`
-	 * and `styles` keys from the supplied JSON. Writes style.css via
+	 * before overwriting. Deep-merges the `settings` and `styles` keys from the
+	 * database into the existing theme.json so that all other keys (templateParts,
+	 * customTemplates, patterns, title, etc.) are preserved. Writes style.css via
 	 * wp_get_global_stylesheet() when available.
 	 *
 	 * @param string $content JSON-encoded global styles (post_content or option value).
@@ -167,12 +168,6 @@ class GlobalStylesSync {
 			$global_styles = array();
 		}
 
-		$theme_json = array(
-			'version'  => 2,
-			'settings' => $global_styles['settings'] ?? array(),
-			'styles'   => $global_styles['styles'] ?? array(),
-		);
-
 		$theme_dir       = get_stylesheet_directory();
 		$theme_json_path = $theme_dir . '/theme.json';
 		$style_css_path  = $theme_dir . '/style.css';
@@ -180,6 +175,45 @@ class GlobalStylesSync {
 		$result = array(
 			'backup'  => array(),
 			'written' => array(),
+		);
+
+		// Read existing theme.json so we can preserve keys we are not syncing.
+		$existing_theme_json = array();
+
+		if ( file_exists( $theme_json_path ) ) {
+			$raw = file_get_contents( $theme_json_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			if ( ! empty( $raw ) ) {
+				$decoded = json_decode( $raw, true );
+				if ( is_array( $decoded ) ) {
+					$existing_theme_json = $decoded;
+				}
+			}
+		}
+
+		// Normalise the DB content before merging: WordPress stores palette,
+		// gradients, duotone, fontSizes and fontFamilies grouped by origin
+		// ({"theme":[…],"default":[…],"custom":[…]}), while theme.json expects
+		// flat arrays. Extract the "theme" origin so the shapes match.
+		$global_styles = $this->normalize_global_styles_for_theme_json( $global_styles );
+
+		// Deep-merge: database `settings` and `styles` win; everything else is kept.
+		// Start from the existing array so that every key retains its original
+		// position (important for clean diffs). Only `settings` and `styles` are
+		// updated in-place; all other top-level keys are left untouched.
+		$theme_json = $existing_theme_json;
+
+		if ( ! isset( $theme_json['version'] ) ) {
+			$theme_json['version'] = 2;
+		}
+
+		$theme_json['settings'] = $this->deep_merge(
+			$existing_theme_json['settings'] ?? array(),
+			$global_styles['settings'] ?? array()
+		);
+
+		$theme_json['styles'] = $this->deep_merge(
+			$existing_theme_json['styles'] ?? array(),
+			$global_styles['styles'] ?? array()
 		);
 
 		// Ensure the backup directory exists.
@@ -191,15 +225,12 @@ class GlobalStylesSync {
 
 		$timestamp = gmdate( 'Y-m-d-His' );
 
-		$theme_json_encoded = wp_json_encode( $theme_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		// Encode the merged array directly to preserve the original key order.
+		// WP_Theme_JSON::get_data() re-serialises according to WordPress's internal
+		// schema order, which would break diff comparisons against the original file.
+		$theme_json_content = wp_json_encode( $theme_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 
-		if ( false === $theme_json_encoded ) {
-			return $result;
-		}
-
-		$theme_json_content = (string) $theme_json_encoded;
-
-		if ( '' === $theme_json_content ) {
+		if ( false === $theme_json_content || '' === $theme_json_content ) {
 			return $result;
 		}
 
@@ -251,6 +282,109 @@ class GlobalStylesSync {
 		}
 
 		return '';
+	}
+
+	/**
+	 * Recursively merge two arrays, with values in $override taking precedence.
+	 *
+	 * Unlike array_merge_recursive(), scalar values in $override replace those
+	 * in $base instead of being collected into an array. Keys that already exist
+	 * in $base are updated in-place so their position in the array is retained,
+	 * which keeps diffs against the original theme.json clean. New keys from
+	 * $override are appended at the end.
+	 *
+	 * Sequential (indexed) arrays are always replaced wholesale — merging them
+	 * by index makes no semantic sense for things like palette entries.
+	 *
+	 * @param array $base     The base array (e.g. existing theme.json section).
+	 * @param array $override The override array (e.g. values from the database).
+	 * @return array The merged result.
+	 */
+	protected function deep_merge( array $base, array $override ): array {
+		foreach ( $override as $key => $value ) {
+			if (
+				is_array( $value ) &&
+				isset( $base[ $key ] ) &&
+				is_array( $base[ $key ] ) &&
+				! $this->is_sequential_array( $value ) &&
+				! $this->is_sequential_array( $base[ $key ] )
+			) {
+				// Both sides are associative: recurse so existing keys keep their position.
+				$base[ $key ] = $this->deep_merge( $base[ $key ], $value );
+			} else {
+				// Scalar, or at least one side is a sequential array: replace entirely.
+				$base[ $key ] = $value;
+			}
+		}
+
+		return $base;
+	}
+
+	/**
+	 * Return true when $arr is a sequential (0-indexed) array.
+	 *
+	 * Used by deep_merge() to decide whether to recurse or replace.
+	 *
+	 * @param array $arr The array to test.
+	 * @return bool
+	 */
+	protected function is_sequential_array( array $arr ): bool {
+		if ( empty( $arr ) ) {
+			return true;
+		}
+
+		return array_keys( $arr ) === range( 0, count( $arr ) - 1 );
+	}
+
+	/**
+	 * Normalise the decoded global-styles array from the database before merging
+	 * it into theme.json.
+	 *
+	 * WordPress groups palette, gradients, duotone, fontSizes and fontFamilies by
+	 * origin inside the wp_global_styles post_content:
+	 *
+	 *   { "theme": [...], "default": [...], "custom": [...] }
+	 *
+	 * theme.json expects flat arrays for these fields. When the DB value is in the
+	 * grouped shape this method extracts the "theme" origin so the shapes match.
+	 *
+	 * @param array $global_styles Decoded global styles from the database.
+	 * @return array Normalised global styles ready to merge into theme.json.
+	 */
+	protected function normalize_global_styles_for_theme_json( array $global_styles ): array {
+		// Fields inside settings that WordPress may group by origin.
+		$grouped_fields = array(
+			'color'      => array( 'palette', 'gradients', 'duotone' ),
+			'typography' => array( 'fontSizes', 'fontFamilies' ),
+		);
+
+		foreach ( $grouped_fields as $section => $fields ) {
+			foreach ( $fields as $field ) {
+				$value = $global_styles['settings'][ $section ][ $field ] ?? null;
+
+				if ( ! is_array( $value ) ) {
+					continue;
+				}
+
+				// If it's already a sequential array it is already in theme.json shape.
+				if ( $this->is_sequential_array( $value ) ) {
+					continue;
+				}
+
+				// It is an associative (origin-grouped) array. Extract "theme" origin
+				// if present; otherwise try "custom", then fall back to the first value.
+				if ( isset( $value['theme'] ) && is_array( $value['theme'] ) ) {
+					$global_styles['settings'][ $section ][ $field ] = $value['theme'];
+				} elseif ( isset( $value['custom'] ) && is_array( $value['custom'] ) ) {
+					$global_styles['settings'][ $section ][ $field ] = $value['custom'];
+				} else {
+					$first = reset( $value );
+					$global_styles['settings'][ $section ][ $field ] = is_array( $first ) ? $first : array();
+				}
+			}
+		}
+
+		return $global_styles;
 	}
 
 	/**
