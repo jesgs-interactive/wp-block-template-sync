@@ -763,9 +763,10 @@ class GlobalStylesSync {
 			'typography' => array( 'fontSizes', 'fontFamilies' ),
 			// Shadow presets were introduced in core (settings.shadow.presets).
 			// The DB may store them keyed by origin; treat them like other presets.
-			// Include both editable presets and the "defaultPresets" slot that
-			// WordPress uses to track changes to built-in defaults.
-			'shadow'     => array( 'presets', 'defaultPresets' ),
+			// Only normalize the editable `presets` array. `defaultPresets` is a
+			// boolean flag (enable/disable) per core and should not be coerced
+			// into an array or otherwise modified by the normalizer.
+			'shadow'     => array( 'presets' ),
 			// Additional preset-like fields that may be keyed by origin in the DB.
 			'spacing'    => array( 'spacingSizes', 'spacingScale' ),
 			'border'     => array( 'radiusSizes' ),
