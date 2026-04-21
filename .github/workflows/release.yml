@@ -100,7 +100,8 @@ jobs:
             --exclude='*.sql' \
             --exclude='*.tar.gz' \
             --exclude='*.zip' \
-            --exclude='manifest.json'
+            --exclude='manifest.json' \
+            --exclude='.phpunit.result.cache'
 
           # Create zip file
           cd /tmp/plugin-build
