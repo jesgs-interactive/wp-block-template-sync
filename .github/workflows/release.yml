@@ -41,12 +41,12 @@ jobs:
           echo "Version: ${VERSION}"
 
           # Replace {{VERSION}} placeholder in plugin file
-          sed -i "s/{{VERSION}}/${VERSION}/g" wp-location-collection.php
+          sed -i "s/{{VERSION}}/${VERSION}/g" wp-block-template-sync.php
 
           # Verify the replacement
           echo "Updated plugin file:"
-          grep "* Version:" wp-location-collection.php
-          grep "const string VERSION" wp-location-collection.php
+          grep "* Version:" wp-block-template-sync.php
+          grep "const string VERSION" wp-block-template-sync.php
 
       - name: Create plugin zip
         run: |
