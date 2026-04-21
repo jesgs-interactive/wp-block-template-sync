@@ -992,7 +992,7 @@ class GlobalStylesSync {
 		echo '<p>If you edit <code>theme.json</code> directly and want to copy its <code>settings</code> and <code>styles</code> into the database (Site Editor global styles), preview the changes and then commit.</p>';
 		echo '<p><button id="wbts-sync-preview" class="button">Preview changes</button> ';
 		echo '<button id="wbts-sync-commit" class="button button-primary" style="display:none">Sync theme.json → Database</button></p>';
-		echo '<div id="wbts-sync-diff" style="margin-top:1rem"></div>';
+		echo '<div id="wbts-sync-diff" style="margin-top:1rem; height: 500px;overflow: auto;background-color: white;"></div>';
 		// Non-JS fallback: simple form that posts to admin-post.php
 		echo '<noscript><form method="post" action="' . \esc_url( \admin_url( 'admin-post.php' ) ) . '">';
 		\wp_nonce_field( 'wbts_sync_theme_to_db', 'wbts_sync_nonce' );
@@ -1281,22 +1281,22 @@ class GlobalStylesSync {
 				$i++; $j++;
 			} elseif ( $dp[ $i + 1 ][ $j ] >= $dp[ $i ][ $j + 1 ] ) {
 				// old line removed
-				$html .= '<del style="background:#fdd;display:block;">' . htmlspecialchars( $old_lines[ $i ] ) . '</del>' . "\n";
+				$html .= '<del style="background:#fdd;display:block;">' . htmlspecialchars( $old_lines[ $i ] ) . '</del>';
 				$i++;
 			} else {
 				// new line added
-				$html .= '<ins style="background:#dfd;display:block;">' . htmlspecialchars( $new_lines[ $j ] ) . '</ins>' . "\n";
+				$html .= '<ins style="background:#dfd;display:block;">' . htmlspecialchars( $new_lines[ $j ] ) . '</ins>';
 				$j++;
 			}
 		}
 
 		while ( $i < $m ) {
-			$html .= '<del style="background:#fdd;display:block;">' . htmlspecialchars( $old_lines[ $i ] ) . '</del>' . "\n";
+			$html .= '<del style="background:#fdd;display:block;">' . htmlspecialchars( $old_lines[ $i ] ) . '</del>';
 			$i++;
 		}
 
 		while ( $j < $n ) {
-			$html .= '<ins style="background:#dfd;display:block;">' . htmlspecialchars( $new_lines[ $j ] ) . '</ins>' . "\n";
+			$html .= '<ins style="background:#dfd;display:block;">' . htmlspecialchars( $new_lines[ $j ] ) . '</ins>';
 			$j++;
 		}
 
