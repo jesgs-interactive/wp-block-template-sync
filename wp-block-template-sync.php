@@ -18,9 +18,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'WP_BLOCK_TEMPLATE_SYNC_VERSION', '{{VERSION}}' );
 define( 'WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
+// Hard-coded GitHub repository used for update checks (owner/repo).
+define( 'WP_BLOCK_TEMPLATE_SYNC_GITHUB_REPO', 'jesgs-interactive/wp-block-template-sync' );
 
 require_once WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR . 'includes/class-template-sync.php';
 require_once WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR . 'includes/class-global-styles-sync.php';
+require_once WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR . 'includes/class-update-checker.php';
 
 add_action(
 	'plugins_loaded',
@@ -29,6 +32,10 @@ add_action(
 		$sync->init();
 
 		$global_styles_sync = new \WpBlockTemplateSync\GlobalStylesSync(); // phpcs:ignore -- hooks registered in constructor; variable kept to document intent.
+
+		// Initialize the update checker (minimal custom GitHub releases checker).
+		$updater = new \WpBlockTemplateSync\UpdateChecker( plugin_basename( __FILE__ ), WP_BLOCK_TEMPLATE_SYNC_VERSION );
+		$updater->init();
 	}
 );
 
