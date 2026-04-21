@@ -1,0 +1,129 @@
+# Copyright (C) 2026 Jess Green
+# This file is distributed under the GPL-2.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: WP Block Template Sync {{VERSION}}\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/wp-block-template-sync-dev\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-04-21T22:59:43+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: wp-block-template-sync\n"
+
+#. Plugin Name of the plugin
+#: wp-block-template-sync.php
+#: includes/class-global-styles-sync.php:932
+#: includes/class-global-styles-sync.php:972
+#: includes/class-global-styles-sync.php:1041
+msgid "WP Block Template Sync"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: wp-block-template-sync.php
+msgid "https://github.com/jesgs-interactive/wp-block-template-sync"
+msgstr ""
+
+#. Description of the plugin
+#: wp-block-template-sync.php
+msgid "Syncs changes to theme templates in the Site Editor with the files in the theme."
+msgstr ""
+
+#. Author of the plugin
+#: wp-block-template-sync.php
+msgid "Jess Green"
+msgstr ""
+
+#. translators: 1: settings section, 2: field name
+#: includes/class-global-styles-sync.php:914
+#, php-format
+msgid "Normalized settings.%1$s.%2$s: coerced non-sequential value to empty array."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:933
+msgid "Template Sync"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:973
+msgid "Settings for WP Block Template Sync."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:976
+msgid "Auto-sync theme.json"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:977
+msgid "Prune generated CSS"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:978
+msgid "Write generated style.css"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:991
+msgid "Prune generated CSS to theme presets only"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1004
+msgid "Automatically sync <code>theme.json</code> (merge settings & styles from the editor into the theme) when edited. The plugin will only write <code>style.css</code> if the \"Write generated style.css\" option is enabled."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1016
+msgid "Allow the plugin to write the generated <code>style.css</code> into the active theme (overwrites stylesheet body except the header). Default: off."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1028
+msgid "Insufficient permissions."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1035
+msgid "Theme files synced to the database successfully."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1037
+msgid "Failed to sync theme files to the database. Check server logs for details."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1050
+msgid "Manual sync"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1051
+msgid "If you edit <code>theme.json</code> directly and want to copy its <code>settings</code> and <code>styles</code> into the database (Site Editor global styles), preview the changes and then commit."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1053
+msgid "Preview changes"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1054
+#: includes/class-global-styles-sync.php:1060
+msgid "Sync theme.json → Database"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1077
+msgid "Insufficient permissions"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1081
+msgid "Invalid request"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1192
+msgid "Failed to decode wp_global_styles post_content; it may contain invalid JSON."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1218
+msgid "No differences"
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1420
+msgid "Recovered JSON by extracting balanced braces from content."
+msgstr ""
+
+#: includes/class-global-styles-sync.php:1433
+msgid "Recovered JSON after stripping HTML tags from content."
+msgstr ""

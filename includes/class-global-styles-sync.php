@@ -283,7 +283,9 @@ class GlobalStylesSync {
 			return;
 		}
 
-		if ( ! apply_filters( 'wbts_auto_sync_global_styles_enabled', true ) ) {
+		// Default behaviour is controlled by an admin option (off by default).
+		$auto_sync_default = (bool) get_option( 'wbts_auto_sync_global_styles', false );
+		if ( ! apply_filters( 'wbts_auto_sync_global_styles_enabled', $auto_sync_default ) ) {
 			return;
 		}
 
@@ -305,7 +307,8 @@ class GlobalStylesSync {
 	 * @return void
 	 */
 	public function on_update_option( $old_value, $new_value, string $option ): void {
-		if ( ! apply_filters( 'wbts_auto_sync_global_styles_enabled', true ) ) {
+		$auto_sync_default = (bool) get_option( 'wbts_auto_sync_global_styles', false );
+		if ( ! apply_filters( 'wbts_auto_sync_global_styles_enabled', $auto_sync_default ) ) {
 			return;
 		}
 
@@ -330,7 +333,8 @@ class GlobalStylesSync {
 	 * @return void
 	 */
 	public function on_after_switch_theme(): void {
-		if ( ! apply_filters( 'wbts_auto_sync_global_styles_enabled', true ) ) {
+		$auto_sync_default = (bool) get_option( 'wbts_auto_sync_global_styles', false );
+		if ( ! apply_filters( 'wbts_auto_sync_global_styles_enabled', $auto_sync_default ) ) {
 			return;
 		}
 
@@ -510,8 +514,11 @@ class GlobalStylesSync {
 				$style_content = $this->prune_css_to_theme_presets( $style_content, $theme_json );
 			}
 
-			// Allow consumers to disable writing the stylesheet entirely.
-			if ( ! apply_filters( 'wbts_write_style_css', true, $style_content, $theme_json ) ) {
+			// Allow consumers to disable writing the stylesheet entirely. The
+			// default behaviour is now controlled by an admin option so site
+			// administrators can toggle writing style.css (default: off).
+			$write_css_default = (bool) get_option( 'wbts_write_style_css_enabled', false );
+			if ( ! apply_filters( 'wbts_write_style_css', $write_css_default, $style_content, $theme_json ) ) {
 				// Skip writing CSS but still return the result for theme.json.
 				$noop = true; // explicit no-op to satisfy linters
 			} else {
@@ -903,7 +910,8 @@ class GlobalStylesSync {
 
 					// Couldn't coerce to a sequential array — clear it to avoid schema errors.
 					$global_styles['settings'][ $section ][ $field ] = array();
-					$warnings[] = sprintf( "Normalized settings.%s.%s: coerced non-sequential value to empty array.", $section, $field );
+					/* translators: 1: settings section, 2: field name */
+					$warnings[] = sprintf( __( 'Normalized settings.%1$s.%2$s: coerced non-sequential value to empty array.', 'wp-block-template-sync' ), $section, $field );
 				}
 			}
 		}
@@ -921,8 +929,8 @@ class GlobalStylesSync {
 	public function add_admin_page(): void {
 		add_submenu_page(
 			'themes.php',
-			'WP Block Template Sync',
-			'Template Sync',
+			__( 'WP Block Template Sync', 'wp-block-template-sync' ),
+			__( 'Template Sync', 'wp-block-template-sync' ),
 			'manage_options',
 			'wbts-template-sync',
 			array( $this, 'render_admin_page' )
@@ -935,6 +943,14 @@ class GlobalStylesSync {
 	 * @return void
 	 */
 	public function register_admin_settings(): void {
+		// Auto-sync setting: default off.
+		register_setting( 'wbts_template_sync', 'wbts_auto_sync_global_styles', array(
+			'type' => 'boolean',
+			'sanitize_callback' => function ( $v ) {
+				return (bool) $v;
+			},
+		) );
+
 		register_setting( 'wbts_template_sync', 'wbts_prune_generated_css', array(
 			'type' => 'boolean',
 			'sanitize_callback' => function ( $v ) {
@@ -942,11 +958,24 @@ class GlobalStylesSync {
 			},
 		) );
 
-		add_settings_section( 'wbts_main', 'WP Block Template Sync', function () {
-			echo '<p>Settings for WP Block Template Sync.</p>';
+		// Control whether the plugin writes generated style.css into the theme.
+		// Default: off (do not write). This option provides an admin-toggleable
+		// default that is passed as the initial value to the `wbts_write_style_css`
+		// filter (so developers can still override via the filter).
+		register_setting( 'wbts_template_sync', 'wbts_write_style_css_enabled', array(
+			'type' => 'boolean',
+			'sanitize_callback' => function ( $v ) {
+				return (bool) $v;
+			},
+		) );
+
+		add_settings_section( 'wbts_main', __( 'WP Block Template Sync', 'wp-block-template-sync' ), function () {
+			echo '<p>' . esc_html__( 'Settings for WP Block Template Sync.', 'wp-block-template-sync' ) . '</p>';
 		}, 'wbts_template_sync' );
 
-		add_settings_field( 'wbts_prune_generated_css', 'Prune generated CSS', array( $this, 'render_prune_field' ), 'wbts_template_sync', 'wbts_main' );
+		add_settings_field( 'wbts_auto_sync_global_styles', __('Auto-sync theme.json', 'wp-block-template-sync'), array( $this, 'render_auto_sync_field' ), 'wbts_template_sync', 'wbts_main' );
+		add_settings_field( 'wbts_prune_generated_css', __('Prune generated CSS', 'wp-block-template-sync'), array( $this, 'render_prune_field' ), 'wbts_template_sync', 'wbts_main' );
+		add_settings_field( 'wbts_write_style_css_enabled', __('Write generated style.css', 'wp-block-template-sync'), array( $this, 'render_write_style_field' ), 'wbts_template_sync', 'wbts_main' );
 	}
 
 	/**
@@ -956,7 +985,37 @@ class GlobalStylesSync {
 	 */
 	public function render_prune_field(): void {
 		$val = (bool) get_option( 'wbts_prune_generated_css', false );
-		echo '<label><input type="checkbox" name="wbts_prune_generated_css" value="1"' . ( $val ? ' checked' : '' ) . '> Prune generated CSS to theme presets only</label>';
+		printf(
+			'<label><input type="checkbox" name="wbts_prune_generated_css" value="1" %s> %s</label>',
+			$val ? 'checked' : '',
+			esc_html__( 'Remove unused preset CSS (keep only CSS for presets defined in theme.json). Default: off.', 'wp-block-template-sync' )
+		);
+	}
+
+	/**
+	 * Render the auto-sync checkbox field.
+	 *
+	 * @return void
+	 */
+	public function render_auto_sync_field(): void {
+		$val = (bool) get_option( 'wbts_auto_sync_global_styles', false );
+		// Clarify that auto-sync updates theme.json; writing style.css is controlled
+		// by the separate "Write generated style.css" option.
+		$label = __( 'Automatically sync <code>theme.json</code> (merge settings & styles from the editor into the theme) when edited. The plugin will only write <code>style.css</code> if the "Write generated style.css" option is enabled.', 'wp-block-template-sync' );
+		$label = wp_kses( $label, array( 'code' => array() ) );
+		printf( '<label><input type="checkbox" name="wbts_auto_sync_global_styles" value="1" %s> %s</label>', $val ? 'checked' : '', $label );
+	}
+
+	/**
+	 * Render the write-style.css checkbox field.
+	 *
+	 * @return void
+	 */
+	public function render_write_style_field(): void {
+		$val = (bool) get_option( 'wbts_write_style_css_enabled', false );
+		$label = __( 'Allow the plugin to write the generated <code>style.css</code> into the active theme (overwrites stylesheet body except the header). Default: off.', 'wp-block-template-sync' );
+		$label = wp_kses( $label, array( 'code' => array() ) );
+		printf( '<label><input type="checkbox" name="wbts_write_style_css_enabled" value="1" %s> %s</label>', $val ? 'checked' : '', $label );
 	}
 
 	/**
@@ -966,20 +1025,20 @@ class GlobalStylesSync {
 	 */
 	public function render_admin_page(): void {
 		if ( ! \current_user_can( 'manage_options' ) ) {
-			echo '<p>Insufficient permissions.</p>';
+			echo '<p>' . esc_html__( 'Insufficient permissions.', 'wp-block-template-sync' ) . '</p>';
 			return;
 		}
 
 		// Show result notice if present.
 		if ( isset( $_GET['wbts_sync_result'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
 			if ( 'success' === $_GET['wbts_sync_result'] ) {
-				echo '<div class="notice notice-success is-dismissible"><p>Theme files synced to the database successfully.</p></div>';
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Theme files synced to the database successfully.', 'wp-block-template-sync' ) . '</p></div>';
 			} else {
-				echo '<div class="notice notice-error is-dismissible"><p>Failed to sync theme files to the database. Check server logs for details.</p></div>';
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to sync theme files to the database. Check server logs for details.', 'wp-block-template-sync' ) . '</p></div>';
 			}
 		}
 
-		echo '<div class="wrap"><h1>WP Block Template Sync</h1>';
+		echo '<div class="wrap"><h1>' . esc_html__( 'WP Block Template Sync', 'wp-block-template-sync' ) . '</h1>';
 		// Settings form
 		echo '<form method="post" action="options.php">';
 		settings_fields( 'wbts_template_sync' );
@@ -988,16 +1047,17 @@ class GlobalStylesSync {
 		echo '</form>';
 
 		// Manual sync UI: preview via AJAX then commit via AJAX (fallback to form available).
-		echo '<h2>Manual sync</h2>';
-		echo '<p>If you edit <code>theme.json</code> directly and want to copy its <code>settings</code> and <code>styles</code> into the database (Site Editor global styles), preview the changes and then commit.</p>';
-		echo '<p><button id="wbts-sync-preview" class="button">Preview changes</button> ';
-		echo '<button id="wbts-sync-commit" class="button button-primary" style="display:none">Sync theme.json → Database</button></p>';
-		echo '<div id="wbts-sync-diff" style="margin-top:1rem; height: 500px;overflow: auto;background-color: white;"></div>';
+		echo '<h2>' . esc_html__( 'Manual sync', 'wp-block-template-sync' ) . '</h2>';
+		$manual_p = __( 'If you edit <code>theme.json</code> directly and want to copy its <code>settings</code> and <code>styles</code> into the database (Site Editor global styles), preview the changes and then commit.', 'wp-block-template-sync' );
+		echo '<p>' . wp_kses( $manual_p, array( 'code' => array() ) ) . '</p>';
+		echo '<p><button id="wbts-sync-preview" class="button">' . esc_html__( 'Preview changes', 'wp-block-template-sync' ) . '</button> ';
+		echo '<button id="wbts-sync-commit" class="button button-primary" style="display:none">' . esc_html__( 'Sync theme.json → Database', 'wp-block-template-sync' ) . '</button></p>';
+		echo '<div id="wbts-sync-diff" style="margin-top:1rem; max-height: 500px; overflow: auto;"></div>';
 		// Non-JS fallback: simple form that posts to admin-post.php
 		echo '<noscript><form method="post" action="' . \esc_url( \admin_url( 'admin-post.php' ) ) . '">';
 		\wp_nonce_field( 'wbts_sync_theme_to_db', 'wbts_sync_nonce' );
 		echo '<input type="hidden" name="action" value="wbts_sync_theme_to_db">';
-		echo '<p><button type="submit" class="button button-primary">Sync theme.json → Database</button></p>';
+		echo '<p><button type="submit" class="button button-primary">' . esc_html__( 'Sync theme.json → Database', 'wp-block-template-sync' ) . '</button></p>';
 		echo '</form></noscript>';
 
 		echo '</div>';
@@ -1014,11 +1074,11 @@ class GlobalStylesSync {
 	 */
 	public function handle_admin_sync(): void {
 		if ( ! \current_user_can( 'edit_theme_options' ) ) {
-			\wp_die( 'Insufficient permissions' );
+			\wp_die( esc_html__( 'Insufficient permissions', 'wp-block-template-sync' ) );
 		}
 
 		if ( ! isset( $_POST['wbts_sync_nonce'] ) || ! \wp_verify_nonce( \wp_unslash( $_POST['wbts_sync_nonce'] ), 'wbts_sync_theme_to_db' ) ) {
-			\wp_die( 'Invalid request' );
+			\wp_die( esc_html__( 'Invalid request', 'wp-block-template-sync' ) );
 		}
 
 		$stylesheet = \get_stylesheet();
@@ -1129,7 +1189,7 @@ class GlobalStylesSync {
 				), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 			} else {
 				// If decoding failed, emit a warning so the UI can surface the issue.
-				$normalization_warnings[] = 'Failed to decode wp_global_styles post_content; it may contain invalid JSON.';
+				$normalization_warnings[] = __( 'Failed to decode wp_global_styles post_content; it may contain invalid JSON.', 'wp-block-template-sync' );
 			}
 		} else {
 			// legacy option
@@ -1155,7 +1215,7 @@ class GlobalStylesSync {
 
 		if ( $theme_pretty === $db_pretty ) {
 			$has_changes = false;
-			$diff_html = '<pre>No differences</pre>';
+			$diff_html = '<pre>' . esc_html__( 'No differences', 'wp-block-template-sync' ) . '</pre>';
 		} else {
 			$has_changes = true;
 			$diff_html = $this->generate_diff_html( $db_pretty, $theme_pretty );
@@ -1357,7 +1417,7 @@ class GlobalStylesSync {
 						$substr = substr( $raw, $start, $i - $start + 1 );
 						$decoded = json_decode( $substr, true );
 						if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
-							$this->last_normalize_warnings[] = 'Recovered JSON by extracting balanced braces from content.';
+							$this->last_normalize_warnings[] = __( 'Recovered JSON by extracting balanced braces from content.', 'wp-block-template-sync' );
 							return $decoded;
 						}
 						break;
@@ -1370,7 +1430,7 @@ class GlobalStylesSync {
 		$stripped = strip_tags( $raw );
 		$decoded = json_decode( $stripped, true );
 		if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
-			$this->last_normalize_warnings[] = 'Recovered JSON after stripping HTML tags from content.';
+			$this->last_normalize_warnings[] = __( 'Recovered JSON after stripping HTML tags from content.', 'wp-block-template-sync' );
 			return $decoded;
 		}
 
