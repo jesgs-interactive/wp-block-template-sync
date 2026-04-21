@@ -1,9 +1,9 @@
 <?php
 /**
  * Plugin Name: WP Block Template Sync
- * Plugin URI:  https://github.com/jesgs-interactive/wp-block-template-sync
+ * Plugin URI: https://github.com/jesgs-interactive/wp-block-template-sync
  * Description: Syncs changes to theme templates in the Site Editor with the files in the theme.
- * Version: 1.0.0
+ * Version: {{VERSION}}
  * Author: Jess Green
  * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WP_BLOCK_TEMPLATE_SYNC_VERSION', '1.0.0' );
+define( 'WP_BLOCK_TEMPLATE_SYNC_VERSION', '{{VERSION}}' );
 define( 'WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once WP_BLOCK_TEMPLATE_SYNC_PLUGIN_DIR . 'includes/class-template-sync.php';
