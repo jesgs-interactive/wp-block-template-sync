@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<project name="wp-block-template-sync" description="" default="">
+    <!-- ============================================  -->
+    <!-- Target: prepare                               -->
+    <!-- ============================================  -->
+    <target name="prepare">
+        <echo msg="Making directory ./build/wp-block-template-sync" />
+        <mkdir dir="./build/wp-block-template-sync" />
+    </target>
+
+    <!-- ============================================  -->
+    <!-- Target: build                                 -->
+    <!-- ============================================  -->
+    <target name="build" depends="prepare">
+        <echo msg="Copying files to build directory..." />
+
+        <echo msg="Copying files to ./build/wp-block-template-sync directory..." />
+        <copy todir="./build/wp-block-template-sync" includeemptydirs="true" >
+            <fileset dir="." defaultexcludes="true">
+                <exclude name="bin/**" />
+                <exclude name="build/**" />
+                <exclude name="vendor/**" />
+                <exclude name="tests/**" />
+                <exclude name=".git/**" />
+                <exclude name=".circleci/**" />
+                <exclude name=".github/**" />
+                <exclude name=".idea/**" />
+                <exclude name=".gitignore" />
+                <exclude name=".editorconfig" />
+                <exclude name=".distignore" />
+                <exclude name=".nvmrc" />
+                <exclude name="manifest.json" />
+                <exclude name="*.xml*" />
+                <exclude name="composer.lock" />
+                <exclude name="README.md" />
+                <exclude name=".phpunit.result.cache" />
+            </fileset>
+        </copy>
+
+        <echo msg="Running composer install --no-dev in build directory" />
+        <exec executable="composer" dir="build/wp-block-template-sync" passthru="yes">
+            <arg value="install"/>
+            <arg value="--no-dev"/>
+        </exec>
+
+        <echo msg="Remove composer files..." />
+        <exec executable="rm" dir="build/wp-block-template-sync" passthru="yes">
+            <arg value="composer.*" />
+        </exec>
+
+        <echo msg="Update Version Number" />
+        <exec executable="../../bin/build.sh" dir="build/wp-block-template-sync" passthru=""/>
+
+    </target>
+
+    <!-- ============================================  -->
+    <!-- (DEFAULT)  Target: dist                       -->
+    <!-- ============================================  -->
+    <target name="dist" depends="build">
+        <echo msg="Creating archive..." />
+
+        <zip destfile="./build/wp-block-template-sync.zip">
+            <fileset dir="./build/block-template-sync">
+                <include name="*/**" />
+            </fileset>
+        </zip>
+
+        <echo msg="Files copied and compressed in build directory OK!" />
+    </target>
+
+</project>
