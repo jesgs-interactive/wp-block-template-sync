@@ -114,6 +114,7 @@ jobs:
             --exclude='*.tar.gz' \
             --exclude='*.zip' \
             --exclude='manifest.json' \
+            --exclude='vendor' \
             --exclude='.phpunit.result.cache'
 
           # Create zip file
