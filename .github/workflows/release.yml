@@ -115,6 +115,9 @@ jobs:
             --exclude='*.zip' \
             --exclude='manifest.json' \
             --exclude='vendor' \
+            --exclude='.idea' \
+            --exclude='.vscode' \
+            --exclude='AGENTS.md' \
             --exclude='.phpunit.result.cache'
 
           # Create zip file
