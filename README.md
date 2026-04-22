@@ -34,7 +34,11 @@ The sync also fires on the `after_switch_theme` hook so the files reflect the co
 
 - `wbts_prune_generated_css` (bool) — When enabled the plugin will prune the generated `style.css` so it only contains preset variables and helper classes that are present in the merged `theme.json`. This is OFF by default to preserve editor and plugin compatibility. Enable with:
 
-You can enable pruning either by the filter above or via the plugin admin UI at Appearance → Template Sync. The admin page exposes a single checkbox labeled "Prune generated CSS to theme presets only".
+You can enable pruning either by the filter above or via the plugin admin UI at Appearance → Template Sync. The admin page exposes checkboxes for the plugin settings:
+
+- "Auto-sync theme.json" — when enabled the plugin automatically syncs the Site Editor's global styles into `theme.json` on save/theme-switch (default: off).
+- "Prune generated CSS" — when enabled the plugin removes generated preset CSS that is not present in the merged `theme.json` so the stylesheet only contains CSS for presets the theme actually defines (default: off).
+- "Write generated style.css" — when enabled the plugin will write the regenerated stylesheet into the active theme's `style.css` (header is preserved). This is OFF by default; when disabled the plugin will still update `theme.json` but will not touch `style.css`.
 
 Programmatic enabling (example):
 
@@ -42,7 +46,10 @@ Programmatic enabling (example):
 add_filter( 'wbts_prune_generated_css', '__return_true' );
 ```
 
-- `wbts_write_style_css` (bool) — Allows consumers to completely disable writing `style.css` (the plugin will still write `theme.json` unless disabled separately). Defaults to `true`.
+
+- `wbts_write_style_css_enabled` (admin option, bool) — Controls the default behavior exposed to the `wbts_write_style_css` filter. Default: OFF. When enabled the plugin will write the generated `style.css` into the active theme when a sync runs. You can toggle this from the admin UI or programmatically via the `wbts_write_style_css` filter.
+
+Programmatic override example (force-disable writing `style.css` regardless of the admin option):
 
 ```php
 add_filter( 'wbts_write_style_css', '__return_false' );
