@@ -112,4 +112,3 @@ class GlobalStylesHelpersTest extends TestCase {
 		$this->assertDoesNotMatchRegularExpression( '/^\s*$/m', $out );
 	}
 }
-

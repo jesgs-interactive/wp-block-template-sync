@@ -107,7 +107,7 @@ class GlobalStylesSyncTest extends TestCase {
 
 		Functions\expect( 'apply_filters' )
 			->once()
-			->with( 'wbts_auto_sync_global_styles_enabled', true )
+			->with( 'wbts_auto_sync_global_styles_enabled', false )
 			->andReturn( true );
 
 		Functions\expect( 'get_stylesheet' )
@@ -136,7 +136,7 @@ class GlobalStylesSyncTest extends TestCase {
 
 		Functions\expect( 'apply_filters' )
 			->once()
-			->with( 'wbts_auto_sync_global_styles_enabled', true )
+			->with( 'wbts_auto_sync_global_styles_enabled', false )
 			->andReturn( true );
 
 		Functions\expect( 'get_stylesheet' )
@@ -167,7 +167,7 @@ class GlobalStylesSyncTest extends TestCase {
 
 		Functions\expect( 'apply_filters' )
 			->once()
-			->with( 'wbts_auto_sync_global_styles_enabled', true )
+			->with( 'wbts_auto_sync_global_styles_enabled', false )
 			->andReturn( false );
 
 		$post = $this->make_post( 21, 'wp-global-styles-my-theme', '{}' );
@@ -187,7 +187,7 @@ class GlobalStylesSyncTest extends TestCase {
 	public function on_update_option_calls_sync_to_theme_with_string_value(): void {
 		Functions\expect( 'apply_filters' )
 			->once()
-			->with( 'wbts_auto_sync_global_styles_enabled', true )
+			->with( 'wbts_auto_sync_global_styles_enabled', false )
 			->andReturn( true );
 
 		$content = '{"version":2}';
@@ -205,7 +205,7 @@ class GlobalStylesSyncTest extends TestCase {
 	public function on_update_option_skips_when_filter_disabled(): void {
 		Functions\expect( 'apply_filters' )
 			->once()
-			->with( 'wbts_auto_sync_global_styles_enabled', true )
+			->with( 'wbts_auto_sync_global_styles_enabled', false )
 			->andReturn( false );
 
 		/** @var GlobalStylesSync|\Mockery\MockInterface $mock */
@@ -223,7 +223,7 @@ class GlobalStylesSyncTest extends TestCase {
 	public function on_after_switch_theme_syncs_when_post_found(): void {
 		Functions\expect( 'apply_filters' )
 			->once()
-			->with( 'wbts_auto_sync_global_styles_enabled', true )
+			->with( 'wbts_auto_sync_global_styles_enabled', false )
 			->andReturn( true );
 
 		$content = '{"version":2,"styles":{}}';
@@ -245,7 +245,7 @@ class GlobalStylesSyncTest extends TestCase {
 	public function on_after_switch_theme_does_nothing_when_no_post(): void {
 		Functions\expect( 'apply_filters' )
 			->once()
-			->with( 'wbts_auto_sync_global_styles_enabled', true )
+			->with( 'wbts_auto_sync_global_styles_enabled', false )
 			->andReturn( true );
 
 		/** @var GlobalStylesSync|\Mockery\MockInterface $mock */
@@ -474,6 +474,18 @@ class GlobalStylesSyncTest extends TestCase {
 		$wp_filesystem = $fs_mock;
 
 		/** @var GlobalStylesSync|\Mockery\MockInterface $mock */
+
+		// Ensure the write-css filter returns true so the plugin writes style.css
+		// for this test. We intercept apply_filters and return true only when the
+		// requested filter is 'wbts_write_style_css'. This avoids trying to mock
+		// the already-defined get_option() function from the bootstrap.
+		Functions\expect( 'apply_filters' )
+			->andReturnUsing( function ( $filter, $default ) {
+				if ( 'wbts_write_style_css' === $filter ) {
+					return true;
+				}
+				return $default;
+			} );
 		$mock = \Mockery::mock( GlobalStylesSync::class )->makePartial()->shouldAllowMockingProtectedMethods();
 		$mock->shouldReceive( 'get_global_stylesheet' )->once()->andReturn( 'body { color: red; }' );
 
