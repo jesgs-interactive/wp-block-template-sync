@@ -77,6 +77,20 @@ composer install
 composer test
 ```
 
+### Testing with Pest
+
+This project now supports running tests with Pest while preserving the existing PHPUnit + Brain Monkey + Mockery setup.
+
+- To run tests with Pest locally:
+
+```bash
+composer pest
+```
+
+- The Pest bootstrap (`tests/Pest.php`) reuses `tests/bootstrap.php` so Brain Monkey and the lightweight WordPress stubs remain available.
+
+Pest is an ergonomic test runner; PHPUnit-style TestCase classes will continue to work while you incrementally convert tests to Pest's function-style syntax.
+
 ## Security
 
 - Only users with the `edit_theme_options` capability can trigger a sync.
