@@ -82,6 +82,15 @@ jobs:
             exit 1
           fi
 
+          # Update POT template placeholder (lowercase) with the same VERSION
+          sed -i "s|{{VERSION}}|${VERSION}|g" languages/wp-block-template-sync.pot
+
+          # Show the top of the POT file for debugging
+          echo "--- POT file head ---"
+          sed -n '1,40p' languages/wp-block-template-sync.pot
+          echo "---------------------"
+
+
       - name: Create plugin zip
         run: |
           PLUGIN_SLUG="${{ steps.slug.outputs.slug }}"
