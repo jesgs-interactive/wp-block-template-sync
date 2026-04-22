@@ -4,3 +4,4 @@
 # PHPUnit build artefacts
 /.phpunit.result.cache
 /build/
+.idea
