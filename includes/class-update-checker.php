@@ -146,12 +146,7 @@ class UpdateChecker {
             return $cached;
         }
 
-        // Validate repo format "owner/repo".
-        if ( false === strpos( $repo, '/' ) ) {
-            return null;
-        }
-
-        $url = 'https://api.github.com/repos/' . rawurlencode( $repo ) . '/releases/latest';
+        $url = 'https://api.github.com/repos/jesgs-interactive/wp-block-template-sync/releases/latest';
 
         $args = array(
             'timeout' => 15,
