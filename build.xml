@@ -32,8 +32,10 @@
                 <exclude name=".nvmrc" />
                 <exclude name="manifest.json" />
                 <exclude name="*.xml*" />
+                <exclude name="composer.json" />
                 <exclude name="composer.lock" />
                 <exclude name="README.md" />
+                <exclude name="AGENTS.md" />
                 <exclude name=".phpunit.result.cache" />
             </fileset>
         </copy>
