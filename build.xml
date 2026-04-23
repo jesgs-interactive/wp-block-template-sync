@@ -26,6 +26,7 @@
                 <exclude name=".circleci/**" />
                 <exclude name=".github/**" />
                 <exclude name=".idea/**" />
+                <exclude name=".vscode/**" />
                 <exclude name=".gitignore" />
                 <exclude name=".editorconfig" />
                 <exclude name=".distignore" />

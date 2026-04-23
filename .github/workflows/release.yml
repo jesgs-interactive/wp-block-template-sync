@@ -148,7 +148,8 @@ jobs:
             --exclude='.idea' \
             --exclude='.vscode' \
             --exclude='AGENTS.md' \
-            --exclude='.phpunit.result.cache'
+            --exclude='.phpunit.result.cache' \
+            --exclude='.nvmrc'
 
           # Create zip file
           cd /tmp/plugin-build
