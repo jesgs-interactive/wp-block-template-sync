@@ -178,8 +178,8 @@ class UpdateChecker {
             return null;
         }
 
-        // Cache for 5 minutes to avoid rate limits.
-        set_transient( $transient_key, $decoded, MINUTE_IN_SECONDS * 5 );
+        // Cache for 6 hours to avoid rate limits.
+        set_transient( $transient_key, $decoded, MINUTE_IN_SECONDS * 360 );
 
         return $decoded;
     }
