@@ -26,7 +26,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist
 
       - name: Run unit tests
-        run: ./vendor/bin/pest --verbose --colors=always
+        run: ./vendor/bin/pest --colors=always
 
   build:
     name: Build and Upload Release Asset
