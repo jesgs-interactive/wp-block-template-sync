@@ -24,6 +24,13 @@ class UpdateChecker {
     /** @var string Current installed version */
     protected string $current_version;
 
+	protected const GITHUB_API_URL = 'https://api.github.com';
+	protected const GITHUB_REPO = 'jesgs-interactive/wp-block-template-sync';
+	protected const GITHUB_REPO_URL = 'https://api.github.com/repos/jesgs-interactive/wp-block-template-sync';
+
+	protected const GITHUB_RELEASES_URL = 'https://github.com/jesgs-interactive/wp-block-template-sync/releases/latest';
+
+
     // No persistent property for transient; key is computed per-repo.
 
     public function __construct( string $plugin_basename, string $current_version ) {
@@ -43,19 +50,14 @@ class UpdateChecker {
      * @return object
      */
     public function check_update( $transient ) {
-        // Repo is hard-coded in the plugin constant.
-        $repo = defined( 'WP_BLOCK_TEMPLATE_SYNC_GITHUB_REPO' ) ? (string) WP_BLOCK_TEMPLATE_SYNC_GITHUB_REPO : '';
-
-        if ( '' === $repo ) {
-            return $transient;
-        }
-
         // Avoid running when no version is set / placeholder present.
-        if ( '' === $this->current_version || false !== strpos( $this->current_version, '{{' ) ) {
+        // Allow the check to run during development when WP_DEBUG=true even if
+        // the version placeholder is present.
+        if ( ('' === $this->current_version || false !== strpos( $this->current_version, '{{' )) && ! WP_DEBUG ) {
             return $transient;
         }
 
-        $release = $this->get_latest_release( $repo );
+        $release = $this->get_latest_release();
 
         if ( ! is_array( $release ) || empty( $release['tag_name'] ) ) {
             return $transient;
@@ -64,7 +66,36 @@ class UpdateChecker {
         $remote_version = ltrim( (string) $release['tag_name'], "vV" );
 
         if ( version_compare( $remote_version, $this->current_version, '>' ) ) {
-            $package = $release['zipball_url'] ?? '';
+            // Prefer a release asset that matches the plugin slug (e.g. "slug.zip")
+            // so the extracted folder name matches the plugin directory. Fall
+            // back to GitHub's zipball URL if no suitable asset exists.
+            $slug = dirname( $this->plugin_basename );
+            $package = '';
+            if ( ! empty( $release['assets'] ) && is_array( $release['assets'] ) ) {
+                foreach ( $release['assets'] as $asset ) {
+                    $name = $asset['name'] ?? '';
+                    $url = $asset['browser_download_url'] ?? '';
+                    if ( '' === $name || '' === $url ) {
+                        continue;
+                    }
+
+                    // Exact match: "slug.zip"
+                    if ( 0 === strcasecmp( $name, $slug . '.zip' ) ) {
+                        $package = $url;
+                        break;
+                    }
+
+                    // Partial match: contains slug and is a zip (e.g. "plugin-v1.2.3.zip").
+                    if ( false !== stripos( $name, $slug ) && strtolower( substr( $name, -4 ) ) === '.zip' ) {
+                        $package = $url;
+                        break;
+                    }
+                }
+            }
+
+            if ( '' === $package ) {
+                $package = $release['zipball_url'] ?? '';
+            }
 
             $update = new \stdClass();
             $update->slug = dirname( $this->plugin_basename );
@@ -101,7 +132,7 @@ class UpdateChecker {
             return $res;
         }
 
-        $repo = defined( 'WP_BLOCK_TEMPLATE_SYNC_GITHUB_REPO' ) ? (string) WP_BLOCK_TEMPLATE_SYNC_GITHUB_REPO : '';
+        $repo = self::GITHUB_REPO;
         if ( '' === $repo ) {
             return $res;
         }
@@ -119,7 +150,36 @@ class UpdateChecker {
         $info->version = $remote_version ?: $this->current_version;
         $info->author = 'Jess Green';
         $info->homepage = $release['html_url'] ?? 'https://github.com';
-        $info->download_link = $release['zipball_url'] ?? '';
+
+        // Prefer a release asset zip matching the plugin slug for proper
+        // installation folder naming. Fall back to the repo zipball URL.
+        $slug = dirname( $this->plugin_basename );
+        $download_link = '';
+        if ( ! empty( $release['assets'] ) && is_array( $release['assets'] ) ) {
+            foreach ( $release['assets'] as $asset ) {
+                $name = $asset['name'] ?? '';
+                $url = $asset['browser_download_url'] ?? '';
+                if ( '' === $name || '' === $url ) {
+                    continue;
+                }
+
+                if ( 0 === strcasecmp( $name, $slug . '.zip' ) ) {
+                    $download_link = $url;
+                    break;
+                }
+
+                if ( false !== stripos( $name, $slug ) && strtolower( substr( $name, -4 ) ) === '.zip' ) {
+                    $download_link = $url;
+                    break;
+                }
+            }
+        }
+
+        if ( '' === $download_link ) {
+            $download_link = $release['zipball_url'] ?? '';
+        }
+
+        $info->download_link = $download_link;
 
         $sections = array();
         $sections['description'] = 'Syncs Site Editor templates and global styles into theme files.';
@@ -139,14 +199,13 @@ class UpdateChecker {
      * @param string $repo
      * @return array|null
      */
-    protected function get_latest_release( string $repo ): ?array {
+    protected function get_latest_release(): ?array {
+		$repo = self::GITHUB_REPO;
         $transient_key = 'wbts_github_release_' . md5( $repo );
         $cached = get_transient( $transient_key );
         if ( is_array( $cached ) ) {
             return $cached;
         }
-
-        $url = 'https://api.github.com/repos/jesgs-interactive/wp-block-template-sync/releases/latest';
 
         $args = array(
             'timeout' => 15,
@@ -156,7 +215,7 @@ class UpdateChecker {
             ),
         );
 
-        $resp = wp_remote_get( $url, $args );
+        $resp = wp_remote_get( self::GITHUB_RELEASES_URL, $args );
         if ( is_wp_error( $resp ) ) {
             return null;
         }

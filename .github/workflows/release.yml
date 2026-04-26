@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -64,15 +64,15 @@ jobs:
           echo "Version: ${VERSION}"
 
           # Use '|' as sed delimiter so slashes in VERSION won't break the substitution
-          sed -i "s|{{VERSION}}|${VERSION}|g" wp-block-template-sync.php
+          sed -i "s|{{VERSION}}|${VERSION}|g" ${{steps.slug.outputs.slug}}.php
 
           # Show the top of the plugin file for debugging
           echo "--- plugin file head ---"
-          sed -n '1,40p' wp-block-template-sync.php
+          sed -n '1,15p' ${{steps.slug.outputs.slug}}.php
           echo "------------------------"
 
           # Verify both the plugin header and the constant were updated (fixed-string match)
-          if ! grep -Fq "Version: ${VERSION}" wp-block-template-sync.php; then
+          if ! grep -Fq "Version: ${VERSION}" ${{steps.slug.outputs.slug}}.php; then
             echo "ERROR: plugin header Version was not updated to ${VERSION}"
             exit 1
           fi
@@ -83,7 +83,7 @@ jobs:
           fi
 
           # Update POT template placeholder (lowercase) with the same VERSION
-          sed -i "s|{{VERSION}}|${VERSION}|g" languages/wp-block-template-sync.pot
+          sed -i "s|{{VERSION}}|${VERSION}|g" languages/${{steps.slug.outputs.slug}}.pot
 
           # Show the top of the POT file for debugging
           echo "--- POT file head ---"
@@ -98,58 +98,9 @@ jobs:
           # Create temporary directory for the plugin
           mkdir -p /tmp/plugin-build/${PLUGIN_SLUG}
 
-          # Copy all files
+          # Copy all files, excluding patterns listed in .distignore
           rsync -av --progress . /tmp/plugin-build/${PLUGIN_SLUG}/ \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='.circleci' \
-            --exclude='.babelrc' \
-            --exclude='.deployignore' \
-            --exclude='.distignore' \
-            --exclude='.editorconfig' \
-            --exclude='.eslintignore' \
-            --exclude='.eslintrc' \
-            --exclude='.gitignore' \
-            --exclude='.gitlab-ci.yml' \
-            --exclude='.travis.yml' \
-            --exclude='.DS_Store' \
-            --exclude='.*~' \
-            --exclude='Thumbs.db' \
-            --exclude='behat.yml' \
-            --exclude='bitbucket-pipelines.yml' \
-            --exclude='bin' \
-            --exclude='composer.json' \
-            --exclude='composer.lock' \
-            --exclude='dependencies.yml' \
-            --exclude='Gruntfile.js' \
-            --exclude='package.json' \
-            --exclude='package-lock.json' \
-            --exclude='phpunit.xml' \
-            --exclude='phpunit.xml.dist' \
-            --exclude='multisite.xml' \
-            --exclude='multisite.xml.dist' \
-            --exclude='.phpcs.xml' \
-            --exclude='phpcs.xml' \
-            --exclude='.phpcs.xml.dist' \
-            --exclude='phpcs.xml.dist' \
-            --exclude='phpcs.dist.xml' \
-            --exclude='build.xml' \
-            --exclude='README.md' \
-            --exclude='webpack.config.js' \
-            --exclude='wp-cli.local.yml' \
-            --exclude='yarn.lock' \
-            --exclude='tests' \
-            --exclude='node_modules' \
-            --exclude='*.sql' \
-            --exclude='*.tar.gz' \
-            --exclude='*.zip' \
-            --exclude='manifest.json' \
-            --exclude='vendor' \
-            --exclude='.idea' \
-            --exclude='.vscode' \
-            --exclude='AGENTS.md' \
-            --exclude='.phpunit.result.cache' \
-            --exclude='.nvmrc'
+            --exclude-from='.distignore'
 
           # Create zip file
           cd /tmp/plugin-build
@@ -162,7 +113,7 @@ jobs:
           ls -lh ${GITHUB_WORKSPACE}/${PLUGIN_SLUG}.zip
 
       - name: Upload release asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         with:
           files: ${{ steps.slug.outputs.slug }}.zip
