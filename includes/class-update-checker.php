@@ -24,11 +24,15 @@ class UpdateChecker {
     /** @var string Current installed version */
     protected string $current_version;
 
-	protected const GITHUB_API_URL = 'https://api.github.com';
-	protected const GITHUB_REPO = 'jesgs-interactive/wp-block-template-sync';
-	protected const GITHUB_REPO_URL = 'https://api.github.com/repos/jesgs-interactive/wp-block-template-sync';
+  public const GITHUB_API_URL = 'https://api.github.com';
+  public const GITHUB_REPO = 'jesgs-interactive/wp-block-template-sync';
+  public const GITHUB_REPO_URL = 'https://api.github.com/repos/jesgs-interactive/wp-block-template-sync';
 
-	protected const GITHUB_RELEASES_URL = 'https://github.com/jesgs-interactive/wp-block-template-sync/releases/latest';
+  public const GITHUB_RELEASES_URL = 'https://github.com/jesgs-interactive/wp-block-template-sync/releases/latest';
+
+  // Plugin metadata constants.
+  public const PLUGIN_NAME = 'WP Block Template Sync';
+  public const PLUGIN_AUTHOR = 'Jess Green';
 
 
     // No persistent property for transient; key is computed per-repo.
@@ -50,7 +54,6 @@ class UpdateChecker {
      * @return object
      */
     public function check_update( $transient ) {
-        // Avoid running when no version is set / placeholder present.
         // Allow the check to run during development when WP_DEBUG=true even if
         // the version placeholder is present.
         if ( ('' === $this->current_version || false !== strpos( $this->current_version, '{{' )) && ! WP_DEBUG ) {
@@ -94,7 +97,12 @@ class UpdateChecker {
             }
 
             if ( '' === $package ) {
-                $package = $release['zipball_url'] ?? '';
+                if ( ! empty( $release['zipball_url'] ) ) {
+                    $package = $release['zipball_url'];
+                } else {
+                    $tag = $release['tag_name'] ?? '';
+                    $package = self::GITHUB_REPO_URL . '/zipball/' . $tag;
+                }
             }
 
             $update = new \stdClass();
@@ -145,10 +153,10 @@ class UpdateChecker {
         $remote_version = ltrim( (string) ( $release['tag_name'] ?? '' ), "vV" );
 
         $info = new \stdClass();
-        $info->name = 'WP Block Template Sync';
+        $info->name = self::PLUGIN_NAME;
         $info->slug = $slug;
         $info->version = $remote_version ?: $this->current_version;
-        $info->author = 'Jess Green';
+        $info->author = self::PLUGIN_AUTHOR;
         $info->homepage = $release['html_url'] ?? 'https://github.com';
 
         // Prefer a release asset zip matching the plugin slug for proper
@@ -176,7 +184,12 @@ class UpdateChecker {
         }
 
         if ( '' === $download_link ) {
-            $download_link = $release['zipball_url'] ?? '';
+            if ( ! empty( $release['zipball_url'] ) ) {
+                $download_link = $release['zipball_url'];
+            } else {
+                $tag = $release['tag_name'] ?? '';
+                $download_link = self::GITHUB_REPO_URL . '/zipball/' . $tag;
+            }
         }
 
         $info->download_link = $download_link;
@@ -194,13 +207,13 @@ class UpdateChecker {
 
     /**
      * Fetch the latest GitHub release for a repo (owner/repo). Uses a transient
-     * to cache results for 5 minutes.
+     * to cache results for 6 hours.
      *
-     * @param string $repo
+     * @param string|null $repo Owner/repo string (optional). Defaults to class constant.
      * @return array|null
      */
-    protected function get_latest_release(): ?array {
-		$repo = self::GITHUB_REPO;
+    protected function get_latest_release( ?string $repo = null ): ?array {
+        $repo = $repo ?: self::GITHUB_REPO;
         $transient_key = 'wbts_github_release_' . md5( $repo );
         $cached = get_transient( $transient_key );
         if ( is_array( $cached ) ) {

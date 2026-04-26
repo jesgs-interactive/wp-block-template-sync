@@ -34,13 +34,14 @@ class UpdateCheckerTest extends TestCase {
 
     #[Test]
     public function check_update_adds_update_when_remote_version_is_newer(): void {
-        $repo = WP_BLOCK_TEMPLATE_SYNC_GITHUB_REPO;
+        $repo = UpdateChecker::GITHUB_REPO;
         $expected_key = 'wbts_github_release_' . md5( $repo );
 
+        $tag = 'v2.0.0';
         $release = array(
-            'tag_name'   => 'v2.0.0',
-            'html_url'   => 'https://github.com/jesgs-interactive/wp-block-template-sync/releases/tag/v2.0.0',
-            'zipball_url'=> 'https://api.github.com/repos/jesgs-interactive/wp-block-template-sync/zipball/v2.0.0',
+            'tag_name'   => $tag,
+            'html_url'   => 'https://github.com/' . UpdateChecker::GITHUB_REPO . '/releases/tag/' . $tag,
+            'zipball_url'=> UpdateChecker::GITHUB_REPO_URL . '/zipball/' . $tag,
             'body'       => 'Release notes',
         );
 
@@ -65,7 +66,7 @@ class UpdateCheckerTest extends TestCase {
 
         Functions\expect( 'set_transient' )
             ->once()
-            ->with( $expected_key, \Mockery::type('array'), 60 * 5 )
+            ->with( $expected_key, \Mockery::type('array'), 60 * 360 )
             ->andReturnTrue();
 
         $checker = new UpdateChecker( 'wp-block-template-sync/wp-block-template-sync.php', '1.0.0' );
@@ -85,13 +86,14 @@ class UpdateCheckerTest extends TestCase {
 
     #[Test]
     public function plugins_api_returns_info_from_cached_release(): void {
-        $repo = WP_BLOCK_TEMPLATE_SYNC_GITHUB_REPO;
+        $repo = UpdateChecker::GITHUB_REPO;
         $expected_key = 'wbts_github_release_' . md5( $repo );
 
+        $tag = 'v3.1.4';
         $release = array(
-            'tag_name'   => 'v3.1.4',
-            'html_url'   => 'https://github.com/jesgs-interactive/wp-block-template-sync/releases/tag/v3.1.4',
-            'zipball_url'=> 'https://api.github.com/repos/jesgs-interactive/wp-block-template-sync/zipball/v3.1.4',
+            'tag_name'   => $tag,
+            'html_url'   => 'https://github.com/' . UpdateChecker::GITHUB_REPO . '/releases/tag/' . $tag,
+            'zipball_url'=> UpdateChecker::GITHUB_REPO_URL . '/zipball/' . $tag,
             'body'       => "What's new",
         );
 
