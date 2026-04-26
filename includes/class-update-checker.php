@@ -41,6 +41,15 @@ class UpdateChecker {
         $this->current_version = $current_version;
     }
 
+    /**
+     * Derive the plugin slug from the plugin basename.
+     *
+     * @return string
+     */
+    protected function get_slug(): string {
+        return basename( $this->plugin_basename, '.php' );
+    }
+
     public function init(): void {
         add_filter( 'site_transient_update_plugins', array( $this, 'check_update' ) );
         add_filter( 'plugins_api', array( $this, 'plugins_api' ), 10, 3 );
@@ -55,9 +64,10 @@ class UpdateChecker {
     public function check_update( $transient ) {
         // Allow the check to run during development when WP_DEBUG=true even if
         // the version placeholder is present.
-        if ( ('' === $this->current_version || false !== strpos( $this->current_version, '{{' )) && ! WP_DEBUG ) {
-            return $transient;
-        }
+	    // Avoid running when no version is set / placeholder present.
+	    if ( ('' === $this->current_version || false !== strpos( $this->current_version, '{{' )) && ! WP_DEBUG ) {
+		    return $transient;
+	    }
 
         $release = $this->get_latest_release();
 
@@ -71,29 +81,8 @@ class UpdateChecker {
             // Prefer a release asset that matches the plugin slug (e.g. "slug.zip")
             // so the extracted folder name matches the plugin directory. Fall
             // back to GitHub's zipball URL if no suitable asset exists.
-            $slug = dirname( $this->plugin_basename );
-            $package = '';
-            if ( ! empty( $release['assets'] ) && is_array( $release['assets'] ) ) {
-                foreach ( $release['assets'] as $asset ) {
-                    $name = $asset['name'] ?? '';
-                    $url = $asset['browser_download_url'] ?? '';
-                    if ( '' === $name || '' === $url ) {
-                        continue;
-                    }
-
-                    // Exact match: "slug.zip"
-                    if ( 0 === strcasecmp( $name, $slug . '.zip' ) ) {
-                        $package = $url;
-                        break;
-                    }
-
-                    // Partial match: contains slug and is a zip (e.g. "plugin-v1.2.3.zip").
-                    if ( false !== stripos( $name, $slug ) && strtolower( substr( $name, -4 ) ) === '.zip' ) {
-                        $package = $url;
-                        break;
-                    }
-                }
-            }
+            $slug = $this->get_slug();
+            $package = $this->find_release_asset_url( $release );
 
             if ( '' === $package ) {
                 // No suitable release asset found for the plugin; do not offer an
@@ -104,7 +93,7 @@ class UpdateChecker {
             }
 
             $update = new \stdClass();
-            $update->slug = dirname( $this->plugin_basename );
+            $update->slug = $this->get_slug();
             $update->new_version = $remote_version;
             $update->url = $release['html_url'] ?? 'https://github.com';
             $update->package = $package;
@@ -132,7 +121,7 @@ class UpdateChecker {
             return $res;
         }
 
-        $slug = dirname( $this->plugin_basename );
+        $slug = $this->get_slug();
 
         if ( empty( $args->slug ) || $args->slug !== $slug ) {
             return $res;
@@ -159,27 +148,7 @@ class UpdateChecker {
 
         // Prefer a release asset zip matching the plugin slug for proper
         // installation folder naming. Fall back to the repo zipball URL.
-        $slug = dirname( $this->plugin_basename );
-        $download_link = '';
-        if ( ! empty( $release['assets'] ) && is_array( $release['assets'] ) ) {
-            foreach ( $release['assets'] as $asset ) {
-                $name = $asset['name'] ?? '';
-                $url = $asset['browser_download_url'] ?? '';
-                if ( '' === $name || '' === $url ) {
-                    continue;
-                }
-
-                if ( 0 === strcasecmp( $name, $slug . '.zip' ) ) {
-                    $download_link = $url;
-                    break;
-                }
-
-                if ( false !== stripos( $name, $slug ) && strtolower( substr( $name, -4 ) ) === '.zip' ) {
-                    $download_link = $url;
-                    break;
-                }
-            }
-        }
+        $download_link = $this->find_release_asset_url( $release );
 
         if ( '' === $download_link ) {
             // No distributable asset present; do not provide plugin download
@@ -199,6 +168,45 @@ class UpdateChecker {
         $info->sections = $sections;
 
         return $info;
+    }
+
+    /**
+     * Find the download URL for a release asset that matches the plugin slug.
+     *
+     * Checks for an exact match ("slug.zip") first, then falls back to any
+     * asset whose name contains the slug and ends in ".zip". Returns an empty
+     * string when no suitable asset is found.
+     *
+     * @param array $release Decoded GitHub release array.
+     * @return string Asset download URL, or '' if none found.
+     */
+    protected function find_release_asset_url( array $release ): string {
+        if ( empty( $release['assets'] ) || ! is_array( $release['assets'] ) ) {
+            return '';
+        }
+
+        $slug = $this->get_slug();
+
+        foreach ( $release['assets'] as $asset ) {
+            $name = $asset['name'] ?? '';
+            $url  = $asset['browser_download_url'] ?? '';
+
+            if ( '' === $name || '' === $url ) {
+                continue;
+            }
+
+            // Exact match: "slug.zip"
+            if ( 0 === strcasecmp( $name, $slug . '.zip' ) ) {
+                return $url;
+            }
+
+            // Partial match: contains slug and is a zip (e.g. "plugin-v1.2.3.zip").
+            if ( false !== stripos( $name, $slug ) && strtolower( substr( $name, -4 ) ) === '.zip' ) {
+                return $url;
+            }
+        }
+
+        return '';
     }
 
     /**
