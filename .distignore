@@ -41,6 +41,10 @@ Thumbs.db
 # CI wrappers and helper scripts
 *.bat
 
+# Other documentation and files that should not be included in the distribution
+AGENTS.md
+README.md
+
 # This file itself should not be redistributed
 /.distignore
 

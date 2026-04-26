@@ -27,8 +27,7 @@ class UpdateChecker {
   public const GITHUB_API_URL = 'https://api.github.com';
   public const GITHUB_REPO = 'jesgs-interactive/wp-block-template-sync';
   public const GITHUB_REPO_URL = 'https://api.github.com/repos/jesgs-interactive/wp-block-template-sync';
-
-  public const GITHUB_RELEASES_URL = 'https://github.com/jesgs-interactive/wp-block-template-sync/releases/latest';
+  public const GITHUB_RELEASES_URL = 'https://api.github.com/repos/jesgs-interactive/wp-block-template-sync/releases/latest';
 
   // Plugin metadata constants.
   public const PLUGIN_NAME = 'WP Block Template Sync';
@@ -97,12 +96,11 @@ class UpdateChecker {
             }
 
             if ( '' === $package ) {
-                if ( ! empty( $release['zipball_url'] ) ) {
-                    $package = $release['zipball_url'];
-                } else {
-                    $tag = $release['tag_name'] ?? '';
-                    $package = self::GITHUB_REPO_URL . '/zipball/' . $tag;
-                }
+                // No suitable release asset found for the plugin; do not offer an
+                // update that uses the repo zipball. The release should include
+                // a distributable asset (e.g. "slug.zip"). Hard-fail by
+                // returning the transient unchanged.
+                return $transient;
             }
 
             $update = new \stdClass();
@@ -184,12 +182,10 @@ class UpdateChecker {
         }
 
         if ( '' === $download_link ) {
-            if ( ! empty( $release['zipball_url'] ) ) {
-                $download_link = $release['zipball_url'];
-            } else {
-                $tag = $release['tag_name'] ?? '';
-                $download_link = self::GITHUB_REPO_URL . '/zipball/' . $tag;
-            }
+            // No distributable asset present; do not provide plugin download
+            // information. Require a release asset rather than falling back to
+            // the repo zipball.
+            return $res;
         }
 
         $info->download_link = $download_link;
