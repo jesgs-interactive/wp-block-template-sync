@@ -61,13 +61,15 @@
     <!-- (DEFAULT)  Target: dist                       -->
     <!-- ============================================  -->
     <target name="dist" depends="build">
-        <echo msg="Creating archive..." />
+        <echo msg="Creating archive (respecting .distignore)..." />
 
-        <zip destfile="./build/wp-block-template-sync.zip">
-            <fileset dir="./build/block-template-sync">
-                <include name="*/**" />
-            </fileset>
-        </zip>
+        <!-- Use the PHP packager to create the zip while respecting .distignore -->
+        <exec executable="php" dir="." passthru="yes">
+            <arg value="bin/package.php" />
+            <arg value="build/wp-block-template-sync" />
+            <arg value="build/wp-block-template-sync.zip" />
+            <arg value=".distignore" />
+        </exec>
 
         <echo msg="Files copied and compressed in build directory OK!" />
     </target>

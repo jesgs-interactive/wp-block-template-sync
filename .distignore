@@ -1,0 +1,46 @@
+# .distignore - files and directories to exclude from distribution packages
+# Adjust as needed before building a release.
+
+# Version control and CI
+/.git/
+/.github/
+.gitignore
+.gitattributes
+
+# Editor and IDE settings
+/.vscode/
+/.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Tests and test tooling
+/tests/
+/phpunit.xml
+/composer.json
+/composer.lock
+/tests/
+
+# Build tools and local scripts
+/bin/
+/build.xml
+/bin/*
+/vendor/bin/
+
+# Vendor dependencies (exclude development dependencies and test helpers)
+/vendor/
+
+# Temporary / environment
+.env
+.env.*
+
+# Windows / Editor artifacts
+Thumbs.db
+.DS_Store
+*.log
+
+# CI wrappers and helper scripts
+*.bat
+
+# This file itself should not be redistributed
+/.distignore
+
